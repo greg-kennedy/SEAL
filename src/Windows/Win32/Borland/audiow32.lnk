@@ -1,0 +1,7 @@
+c0d32.obj +
+audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj iofile.obj +
+modeng.obj nondrv.obj mixdrv.obj _mixdrv.obj windrv.obj audiow32.obj
+audiow32.dll
+audiow32.map
+cw32.lib import32.lib
+Windows\Win32\Borland\audiow32.def
