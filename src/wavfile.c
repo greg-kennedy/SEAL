@@ -1,10 +1,14 @@
 /*
- * $Id: wavfile.c 1.5 1996/05/24 08:30:44 chasan released $
+ * $Id: wavfile.c 1.7 1996/09/13 15:10:22 chasan released $
  *
  * Windows RIFF/WAVE PCM file loader routines.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -26,44 +30,46 @@
 #define WAVE_FORMAT_PCM     1
 
 typedef struct {
-    USHORT  wFormatTag;
-    USHORT  nChannels;
-    ULONG   nSamplesPerSec;
-    ULONG   nAvgBytesPerSec;
-    USHORT  nBlockAlign;
-    USHORT  wBitsPerSample;
+    WORD    wFormatTag;
+    WORD    nChannels;
+    DWORD   nSamplesPerSec;
+    DWORD   nAvgBytesPerSec;
+    WORD    nBlockAlign;
+    WORD    wBitsPerSample;
 } PCMWAVEFORMAT;
 
 typedef struct {
-    ULONG   fccId;
-    ULONG   dwSize;
+    DWORD   fccId;
+    DWORD   dwSize;
 } CHUNKHEADER;
 
 typedef struct {
-    ULONG   fccId;
-    ULONG   dwSize;
-    ULONG   fccType;
+    DWORD   fccId;
+    DWORD   dwSize;
+    DWORD   fccType;
 } RIFFHEADER;
 
 
-UINT AIAPI ALoadWaveFile(PSZ pszFileName, PAUDIOWAVE* ppWave)
+UINT AIAPI ALoadWaveFile(LPSTR lpszFileName, 
+			 LPAUDIOWAVE* lplpWave, DWORD dwFileOffset)
 {
     static RIFFHEADER Header;
     static CHUNKHEADER Chunk;
     static PCMWAVEFORMAT Fmt;
-    PAUDIOWAVE pWave;
+    LPAUDIOWAVE lpWave;
     UINT n, nErrorCode;
 
-    if (ppWave == NULL) {
+    if (lplpWave == NULL) {
         return AUDIO_ERROR_INVALPARAM;
     }
-    *ppWave = NULL;
+    *lplpWave = NULL;
 
-    if (AIOOpenFile(pszFileName)) {
+    if (AIOOpenFile(lpszFileName)) {
         return AUDIO_ERROR_FILENOTFOUND;
     }
+    AIOSeekFile(dwFileOffset, SEEK_SET);
 
-    if ((pWave = (PAUDIOWAVE) calloc(1, sizeof(AUDIOWAVE))) == NULL) {
+    if ((lpWave = (LPAUDIOWAVE) calloc(1, sizeof(AUDIOWAVE))) == NULL) {
         AIOCloseFile();
         return AUDIO_ERROR_NOMEMORY;
     }
@@ -75,7 +81,7 @@ UINT AIAPI ALoadWaveFile(PSZ pszFileName, PAUDIOWAVE* ppWave)
     Header.dwSize += (Header.dwSize & 1);
     if (Header.fccId != FOURCC_RIFF || Header.fccType != FOURCC_WAVE) {
         AIOCloseFile();
-        AFreeWaveFile(pWave);
+        AFreeWaveFile(lpWave);
         return AUDIO_ERROR_BADFILEFORMAT;
     }
 
@@ -101,29 +107,29 @@ UINT AIAPI ALoadWaveFile(PSZ pszFileName, PAUDIOWAVE* ppWave)
             /* read RIFF/WAVE data chunk */
             if (Fmt.wFormatTag != WAVE_FORMAT_PCM) {
                 AIOCloseFile();
-                AFreeWaveFile(pWave);
+                AFreeWaveFile(lpWave);
                 return AUDIO_ERROR_BADFILEFORMAT;
             }
-            pWave->dwLength = Chunk.dwSize;
-            pWave->nSampleRate = Fmt.nSamplesPerSec;
-            pWave->wFormat = AUDIO_FORMAT_8BITS | AUDIO_FORMAT_MONO;
+            lpWave->dwLength = Chunk.dwSize;
+            lpWave->nSampleRate = (WORD) Fmt.nSamplesPerSec;
+            lpWave->wFormat = AUDIO_FORMAT_8BITS | AUDIO_FORMAT_MONO;
             if (Fmt.wBitsPerSample != 8)
-                pWave->wFormat |= AUDIO_FORMAT_16BITS;
+                lpWave->wFormat |= AUDIO_FORMAT_16BITS;
             if (Fmt.nChannels != 1)
-                pWave->wFormat |= AUDIO_FORMAT_STEREO;
-            if ((nErrorCode = ACreateAudioData(pWave)) != AUDIO_ERROR_NONE) {
+                lpWave->wFormat |= AUDIO_FORMAT_STEREO;
+            if ((nErrorCode = ACreateAudioData(lpWave)) != AUDIO_ERROR_NONE) {
                 AIOCloseFile();
-                AFreeWaveFile(pWave);
+                AFreeWaveFile(lpWave);
                 return nErrorCode;
             }
-            AIOReadFile(pWave->pData, pWave->dwLength);
-            if (!(pWave->wFormat & AUDIO_FORMAT_16BITS)) {
-                for (n = 0; n < pWave->dwLength; n++)
-                    pWave->pData[n] ^= 0x80;
+            AIOReadFile(lpWave->lpData, lpWave->dwLength);
+            if (!(lpWave->wFormat & AUDIO_FORMAT_16BITS)) {
+                for (n = 0; n < lpWave->dwLength; n++)
+                    lpWave->lpData[n] ^= 0x80;
             }
-            AWriteAudioData(pWave, 0, pWave->dwLength);
+            AWriteAudioData(lpWave, 0, lpWave->dwLength);
             AIOCloseFile();
-            *ppWave = pWave;
+            *lplpWave = lpWave;
             return AUDIO_ERROR_NONE;
         }
         else {
@@ -137,7 +143,10 @@ UINT AIAPI ALoadWaveFile(PSZ pszFileName, PAUDIOWAVE* ppWave)
 }
 
 
-UINT AIAPI AFreeWaveFile(PAUDIOWAVE pWave)
+UINT AIAPI AFreeWaveFile(LPAUDIOWAVE lpWave)
 {
-    return ADestroyAudioData(pWave);
+    UINT rc;
+    rc = ADestroyAudioData(lpWave);  /*** FIX: 04/12/98 ***/
+    free(lpWave);
+    return rc;
 }

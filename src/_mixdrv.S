@@ -1,11 +1,16 @@
 /*
- * $Id: _mixdrv.S 1.7 1996/05/31 02:15:04 chasan released $
+ * $Id: _mixdrv.S 1.8 1996/08/15 02:33:23 chasan released $
+ *                1.9 1998/10/25 15:46:38 chasan released (BeOS port)
  *
  * Low-level assembly resamplation and quantization routines.
  * Optimized for superscalar architecture of Pentium processors.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
         .file   "_mixdrv"
@@ -15,10 +20,17 @@
 #define __ASSEMBLY__
 #include <linux/linkage.h>
 #else
+#ifdef __BEOS__
+#define ALIGN .align 4,0x90
+#define SYMBOL_NAME(name) name
+#define SYMBOL_NAME_LABEL(name) name##:
+#define ENTRY(name) .globl SYMBOL_NAME(name); ALIGN; SYMBOL_NAME_LABEL(name)
+#else
 #define ALIGN .align 4,0x90
 #define SYMBOL_NAME(name) _##name
 #define SYMBOL_NAME_LABEL(name) _##name##:
 #define ENTRY(name) .globl SYMBOL_NAME(name); ALIGN; SYMBOL_NAME_LABEL(name)
+#endif
 #endif
 
 /* voice structure field offsets */
@@ -37,8 +49,8 @@ ACCURACY        = 12
 
         .data
 
-        .globl  SYMBOL_NAME(pVolumeTable)
-        .globl  SYMBOL_NAME(pFilterTable)
+        .globl  SYMBOL_NAME(lpVolumeTable)
+        .globl  SYMBOL_NAME(lpFilterTable)
 
         ALIGN
 nCount:         .long   0
@@ -48,7 +60,7 @@ nStepHi:        .long   0
         .text
 
 /*
- * VOID QuantAudioData08(PVOID pBuffer, PLONG pData, UINT nCount)
+ * VOID QuantAudioData08(LPVOID lpBuffer, LPLONG lpData, UINT nCount)
  */
 ENTRY(QuantAudioData08)
         pushl   %ebp
@@ -92,7 +104,7 @@ ENTRY(QuantAudioData08)
         jmp     2b
 
 /*
- * VOID QuantAudioData16(PVOID pBuffer, PLONG pData, UINT nCount)
+ * VOID QuantAudioData16(LPVOID lpBuffer, LPLONG lpData, UINT nCount)
  */
 ENTRY(QuantAudioData16)
         pushl   %ebp
@@ -139,7 +151,7 @@ ENTRY(QuantAudioData16)
 /*------------------------- 8 bit mixing routines --------------------------*/
 
 /*
- * VOID MixAudioData08M(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData08M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData08M)
         pushl   %ebp
@@ -165,7 +177,7 @@ __MixAudioData08M:
         shll    $10,%ebx                /* get table offset */
         pushl   %esi
         movl    %ecx,%eax               /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx /* accum to 32.32 fixed-point */
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx /* accum to 32.32 fixed-point */
         sarl    $ACCURACY,%eax          /* pitch to 32.32 fixed-point */
         shrl    $2,%ebx
         shll    $(32-ACCURACY),%ecx
@@ -186,7 +198,7 @@ __MixAudioData08M:
         shrl    $4,%edx
         leal    -0x40(%edi,%eax,4),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    OFF(%edi),%edx;         \
@@ -260,7 +272,7 @@ __MixAudioData08M:
 
 
 /*
- * VOID MixAudioData08S(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData08S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData08S)
         pushl   %ebp
@@ -307,8 +319,8 @@ MixAudioPan08S:
         subl    %ecx,%ebx
         shll    $10,%ebx
         shll    $10,%ecx
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
-        addl    SYMBOL_NAME(pVolumeTable),%ecx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ecx
         shrl    $2,%ebx
         shrl    $2,%ecx
 
@@ -334,7 +346,7 @@ MixAudioPan08S:
         shrl    $4,%edx
         leal    -0x80(%edi,%eax,8),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    (,%ebx,4),%eax;         \
@@ -434,7 +446,7 @@ MixAudioLeft08S:
         shll    $10,%ebx                /* get table offset */
         pushl   %esi
         movl    %ecx,%eax               /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx /* accum to 32.32 fixed-point */
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx /* accum to 32.32 fixed-point */
         sarl    $ACCURACY,%eax          /* pitch to 32.32 fixed-point */
         shrl    $2,%ebx
         shll    $(32-ACCURACY),%ecx
@@ -455,7 +467,7 @@ MixAudioLeft08S:
         shrl    $4,%edx
         leal    -0x80(%edi,%eax,8),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    OFF(%edi),%edx;         \
@@ -542,7 +554,7 @@ MixAudioMiddle08S:
         shll    $10,%ebx                /* get table offset */
         pushl   %esi
         movl    %ecx,%eax               /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx /* accum to 32.32 fixed-point */
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx /* accum to 32.32 fixed-point */
         sarl    $ACCURACY,%eax          /* pitch to 32.32 fixed-point */
         shrl    $2,%ebx
         shll    $(32-ACCURACY),%ecx
@@ -563,7 +575,7 @@ MixAudioMiddle08S:
         shrl    $4,%edx
         leal    -0x80(%edi,%eax,8),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    OFF+0(%edi),%edx;       \
@@ -640,7 +652,7 @@ MixAudioMiddle08S:
 
 
 /*
- * VOID MixAudioData08MI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData08MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData08MI)
         pushl   %ebp
@@ -672,7 +684,7 @@ ENTRY(MixAudioData08MI)
         pushl   %esi
 
         shll    $10,%ebx                /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
         shrl    $2,%ebx
         movb    %dl,%bl                 /* save sample for filtering */
 
@@ -691,13 +703,13 @@ ENTRY(MixAudioData08MI)
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
 
         movl    nCount,%eax             /* jump inside of the loop */
         andl    $0x0F,%eax
         leal    -0x40(%edi,%eax,4),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \
@@ -770,7 +782,7 @@ ENTRY(MixAudioData08MI)
 
 
 /*
- * VOID MixAudioData08SI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData08SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData08SI)
         pushl   %ebp
@@ -823,8 +835,8 @@ MixAudioPan08SI:
         subl    %ecx,%ebx
         shll    $10,%ebx
         shll    $10,%ecx
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
-        addl    SYMBOL_NAME(pVolumeTable),%ecx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ecx
         shrl    $2,%ebx
         shrl    $2,%ecx
         movb    %al,%bl                 /* save sample for filtering */
@@ -840,7 +852,7 @@ MixAudioPan08SI:
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
         pushl   %eax
         shll    $(32-ACCURACY),%eax
         movl    %eax,nStepLo
@@ -852,7 +864,7 @@ MixAudioPan08SI:
         andl    $0x0F,%eax
         leal    -0x80(%edi,%eax,8),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \
@@ -949,7 +961,7 @@ MixAudioLeft08SI:
         pushl   %esi
 
         shll    $10,%ebx                /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
         shrl    $2,%ebx
         movb    %dl,%bl                 /* save sample for filtering */
 
@@ -968,13 +980,13 @@ MixAudioLeft08SI:
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
 
         movl    nCount,%eax             /* jump inside of the loop */
         andl    $0x0F,%eax
         leal    -0x80(%edi,%eax,8),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \
@@ -1061,7 +1073,7 @@ MixAudioMiddle08SI:
 
         shrl    $1,%ebx                 /* get volume table address */
         shll    $10,%ebx
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
         shrl    $2,%ebx
         movb    %dl,%bl                 /* save sample for filtering */
 
@@ -1080,13 +1092,13 @@ MixAudioMiddle08SI:
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
 
         movl    nCount,%eax             /* jump inside of the loop */
         andl    $0x0F,%eax
         leal    -0x80(%edi,%eax,8),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \
@@ -1161,7 +1173,7 @@ MixAudioMiddle08SI:
 /*---------------------- fake 16 bit mixing routines -----------------------*/
 
 /*
- * VOID MixAudioData16M(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData16M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData16M)
         pushl   %ebp
@@ -1188,7 +1200,7 @@ __MixAudioData16M:
         shll    $10,%ebx                /* get table offset */
         pushl   %esi
         movl    %ecx,%eax               /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx /* accum to 32.32 fixed-point */
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx /* accum to 32.32 fixed-point */
         sarl    $ACCURACY,%eax          /* pitch to 32.32 fixed-point */
         shrl    $2,%ebx
         shll    $(32-ACCURACY),%ecx
@@ -1209,7 +1221,7 @@ __MixAudioData16M:
         shrl    $4,%edx
         leal    -0x40(%edi,%eax,4),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    OFF(%edi),%edx;         \
@@ -1283,7 +1295,7 @@ __MixAudioData16M:
 
 
 /*
- * VOID MixAudioData16S(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData16S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData16S)
         pushl   %ebp
@@ -1331,8 +1343,8 @@ MixAudioPan16S:
         subl    %ecx,%ebx
         shll    $10,%ebx
         shll    $10,%ecx
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
-        addl    SYMBOL_NAME(pVolumeTable),%ecx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ecx
         shrl    $2,%ebx
         shrl    $2,%ecx
 
@@ -1358,7 +1370,7 @@ MixAudioPan16S:
         shrl    $4,%edx
         leal    -0x80(%edi,%eax,8),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    (,%ebx,4),%eax;         \
@@ -1459,7 +1471,7 @@ MixAudioLeft16S:
         shll    $10,%ebx                /* get table offset */
         pushl   %esi
         movl    %ecx,%eax               /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx /* accum to 32.32 fixed-point */
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx /* accum to 32.32 fixed-point */
         sarl    $ACCURACY,%eax          /* pitch to 32.32 fixed-point */
         shrl    $2,%ebx
         shll    $(32-ACCURACY),%ecx
@@ -1480,7 +1492,7 @@ MixAudioLeft16S:
         shrl    $4,%edx
         leal    -0x80(%edi,%eax,8),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    OFF(%edi),%edx;         \
@@ -1568,7 +1580,7 @@ MixAudioMiddle16S:
         shll    $10,%ebx                /* get table offset */
         pushl   %esi
         movl    %ecx,%eax               /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx /* accum to 32.32 fixed-point */
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx /* accum to 32.32 fixed-point */
         sarl    $ACCURACY,%eax          /* pitch to 32.32 fixed-point */
         shrl    $2,%ebx
         shll    $(32-ACCURACY),%ecx
@@ -1589,7 +1601,7 @@ MixAudioMiddle16S:
         shrl    $4,%edx
         leal    -0x80(%edi,%eax,8),%edi
         movl    %edx,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movl    OFF+0(%edi),%edx;       \
@@ -1666,7 +1678,7 @@ MixAudioMiddle16S:
 
 
 /*
- * VOID MixAudioData16MI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData16MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData16MI)
         pushl   %ebp
@@ -1699,7 +1711,7 @@ ENTRY(MixAudioData16MI)
         pushl   %esi
 
         shll    $10,%ebx                /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
         shrl    $2,%ebx
         movb    %dl,%bl                 /* save sample for filtering */
 
@@ -1718,13 +1730,13 @@ ENTRY(MixAudioData16MI)
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
 
         movl    nCount,%eax             /* jump inside of the loop */
         andl    $0x0F,%eax
         leal    -0x40(%edi,%eax,4),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \
@@ -1797,7 +1809,7 @@ ENTRY(MixAudioData16MI)
 
 
 /*
- * VOID MixAudioData16SI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+ * VOID MixAudioData16SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
  */
 ENTRY(MixAudioData16SI)
         pushl   %ebp
@@ -1851,8 +1863,8 @@ MixAudioPan16SI:
         subl    %ecx,%ebx
         shll    $10,%ebx
         shll    $10,%ecx
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
-        addl    SYMBOL_NAME(pVolumeTable),%ecx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ecx
         shrl    $2,%ebx
         shrl    $2,%ecx
         movb    %al,%bl                 /* save sample for filtering */
@@ -1868,7 +1880,7 @@ MixAudioPan16SI:
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
         pushl   %eax
         shll    $(32-ACCURACY),%eax
         movl    %eax,nStepLo
@@ -1880,7 +1892,7 @@ MixAudioPan16SI:
         andl    $0x0F,%eax
         leal    -0x80(%edi,%eax,8),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \
@@ -1978,7 +1990,7 @@ MixAudioLeft16SI:
         pushl   %esi
 
         shll    $10,%ebx                /* get volume table address */
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
         shrl    $2,%ebx
         movb    %dl,%bl                 /* save sample for filtering */
 
@@ -1997,13 +2009,13 @@ MixAudioLeft16SI:
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
 
         movl    nCount,%eax             /* jump inside of the loop */
         andl    $0x0F,%eax
         leal    -0x80(%edi,%eax,8),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \
@@ -2091,7 +2103,7 @@ MixAudioMiddle16SI:
 
         shrl    $1,%ebx                 /* get volume table address */
         shll    $10,%ebx
-        addl    SYMBOL_NAME(pVolumeTable),%ebx
+        addl    SYMBOL_NAME(lpVolumeTable),%ebx
         shrl    $2,%ebx
         movb    %dl,%bl                 /* save sample for filtering */
 
@@ -2110,13 +2122,13 @@ MixAudioMiddle16SI:
         neg     %edx
 1:      shrl    $(ACCURACY-5),%edx
         shll    $8,%edx
-        addl    SYMBOL_NAME(pFilterTable),%edx
+        addl    SYMBOL_NAME(lpFilterTable),%edx
 
         movl    nCount,%eax             /* jump inside of the loop */
         andl    $0x0F,%eax
         leal    -0x80(%edi,%eax,8),%edi
         shrl    $4,nCount
-        jmpl    18f(,%eax,4)
+        jmpl    *18f(,%eax,4)
 
 #define RESAMPLE(OFF)                   \
         movb    %bl,%dl;                \

@@ -7,11 +7,11 @@ CFLAGS = -zq -zu -ml -c -w9 -we -5 -s -oxt -D__DOS16__ -D__16BIT__
 AFLAGS = -t -m -q -zi
 LFLAGS = -zq -ml
 
-OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj &
-	iofile.obj modeng.obj nondrv.obj mixdrv.obj &
-	msdos.obj sbdrv.obj pasdrv.obj wssdrv.obj gusdrv.obj ariadrv.obj
+OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj mtmfile.obj &
+	iofile.obj modeng.obj nondrv.obj mixdrv.obj msdos.obj &
+	sbdrv.obj awedrv.obj pasdrv.obj wssdrv.obj gusdrv.obj ariadrv.obj
 
-LIB = audiowcl.lib
+LIB = ..\lib\DOS\audiowcl.lib
 
 all : mp.exe $(LIB) clean .SYMBOLIC
 	@echo done.

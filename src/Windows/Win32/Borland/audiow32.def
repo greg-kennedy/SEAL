@@ -1,5 +1,5 @@
 LIBRARY         audiow32
-DESCRIPTION     'Audio Library 1.0 for Win32'
+DESCRIPTION     'Audio Library 1.07 for Win32'
 CODE            PRELOAD MOVEABLE DISCARDABLE
 DATA            PRELOAD MOVEABLE
 EXPORTS         AInitialize             @100
@@ -44,7 +44,11 @@ EXPORTS         AInitialize             @100
                 AGetModuleVolume        @139
                 AGetModulePosition      @140
                 AGetModuleStatus        @141
+                ASetModuleCallback      @146
                 ALoadModuleFile         @142
                 AFreeModuleFile         @143
                 ALoadWaveFile           @144
                 AFreeWaveFile           @145
+                AGetModuleTrack         @147
+		ASetAudioMixerValue	@148
+		AUpdateAudioEx		@149

@@ -7,11 +7,11 @@ CFLAGS = -WX -c -w9 -5 -O2 -D__DPMI__ -D__ASM__
 AFLAGS = -t -m -q -ml -zi
 LFLAGS = -WX
 
-OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj \
-	iofile.obj modeng.obj nondrv.obj mixdrv.obj _mixdrv.obj \
-	msdos.obj sbdrv.obj pasdrv.obj wssdrv.obj gusdrv.obj ariadrv.obj
+OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj mtmfile.obj \
+	iofile.obj modeng.obj nondrv.obj mixdrv.obj _mixdrv.obj msdos.obj \
+	sbdrv.obj awedrv.obj pasdrv.obj wssdrv.obj gusdrv.obj ariadrv.obj
 
-LIB = audiobcf.lib
+LIB = ..\lib\DOS\audiobcf.lib
 
 all : mp.exe $(LIB) clean
 	@echo done.

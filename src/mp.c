@@ -1,10 +1,14 @@
 /*
- * $Id: mp.c 1.11 1996/06/16 00:52:23 chasan released $
+ * $Id: mp.c 1.13 1996/09/13 18:18:38 chasan released $
  *
  * Module player demonstration
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -18,10 +22,11 @@
 #define kbhit() 0
 #endif
 
+
 struct {
     AUDIOINFO Info;
     AUDIOCAPS Caps;
-    PAUDIOMODULE pModule;
+    LPAUDIOMODULE lpModule;
     UINT nVolume;
     BOOL bStopped;
 } State;
@@ -40,7 +45,7 @@ void Assert(UINT nErrorCode)
 #ifdef __MSC__
 void __cdecl CleanUp(void)
 #else
-void CleanUp(void)
+    void CleanUp(void)
 #endif
 {
     ACloseAudio();
@@ -49,6 +54,14 @@ void CleanUp(void)
 void Banner(void)
 {
 
+/* BeOS R3 */
+#ifdef __BEOS__
+#define _SYSTEM_ "BeOS"
+#endif
+/* OS/2 MMPM */
+#ifdef __OS2__
+#define _SYSTEM_ "OS/2 MMPM"
+#endif
 /* Linux/386 */
 #ifdef __LINUX__
 #define _SYSTEM_ "Linux"
@@ -127,7 +140,11 @@ void Banner(void)
 #endif
 #endif
 
-    printf("MOD/S3M/XM Module Player Version 0.5 (" _SYSTEM_ " version)\n");
+#ifndef _SYSTEM_
+#define _SYSTEM_ "UNKNOWN"
+#endif
+    
+    printf("MOD/MTM/S3M/XM Module Player Version 0.6 (" _SYSTEM_ " version)\n");
     printf("Please send bug reports to: chasan@dcc.uchile.cl\n");
 }
 
@@ -152,8 +169,8 @@ void Usage(void)
 
 int main(int argc, char *argv[])
 {
-    PSZ pszOption, pszOptArg, pszFileName;
-    UINT n;
+    LPSTR lpszOption, lpszOptArg, lpszFileName;
+    int n;
 
     /* initialize the audio system library */
     AInitialize();
@@ -166,16 +183,16 @@ int main(int argc, char *argv[])
     State.Info.nDeviceId = AUDIO_DEVICE_MAPPER;
     State.Info.wFormat = AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO;
     State.Info.nSampleRate = 44100;
-    State.nVolume = 64;
+    State.nVolume = 96;
 
     /* parse command line options */
-    for (n = 1; n < argc && (pszOption = argv[n])[0] == '-'; n++) {
-        pszOptArg = &pszOption[2];
-        if (strchr("crv", pszOption[1]) && !pszOptArg[0] && n < argc - 1)
-            pszOptArg = argv[++n];
-        switch (pszOption[1]) {
+    for (n = 1; n < argc && (lpszOption = argv[n])[0] == '-'; n++) {
+        lpszOptArg = &lpszOption[2];
+        if (strchr("crv", lpszOption[1]) && !lpszOptArg[0] && n < argc - 1)
+            lpszOptArg = argv[++n];
+        switch (lpszOption[1]) {
         case 'c':
-            State.Info.nDeviceId = atoi(pszOptArg);
+            State.Info.nDeviceId = atoi(lpszOptArg);
             break;
         case '8':
             State.Info.wFormat &= ~AUDIO_FORMAT_16BITS;
@@ -187,12 +204,12 @@ int main(int argc, char *argv[])
             State.Info.wFormat |= AUDIO_FORMAT_FILTER;
             break;
         case 'r':
-            State.Info.nSampleRate = (UINT) atoi(pszOptArg);
+            State.Info.nSampleRate = (UINT) atoi(lpszOptArg);
             if (State.Info.nSampleRate < 1000)
                 State.Info.nSampleRate *= 1000;
             break;
         case 'v':
-            State.nVolume = atoi(pszOptArg);
+            State.nVolume = atoi(lpszOptArg);
             break;
         default:
             Usage();
@@ -207,30 +224,35 @@ int main(int argc, char *argv[])
     /* display playback audio device information */
     Assert(AGetAudioDevCaps(State.Info.nDeviceId, &State.Caps));
     printf("%s playing at %d-bit %s %u Hz\n", State.Caps.szProductName,
-        State.Info.wFormat & AUDIO_FORMAT_16BITS ? 16 : 8,
-        State.Info.wFormat & AUDIO_FORMAT_STEREO ? "stereo" : "mono",
-        State.Info.nSampleRate);
+	   State.Info.wFormat & AUDIO_FORMAT_16BITS ? 16 : 8,
+	   State.Info.wFormat & AUDIO_FORMAT_STEREO ? "stereo" : "mono",
+	   State.Info.nSampleRate);
 
-    while (n < argc && (pszFileName = argv[n++]) != NULL) {
+    while (n < argc && (lpszFileName = argv[n++]) != NULL) {
         /* load module file from disk */
-        printf("Loading: %s\n", pszFileName);
-        Assert(ALoadModuleFile(pszFileName, &State.pModule));
+        printf("Loading: %s\n", lpszFileName);
+        Assert(ALoadModuleFile(lpszFileName, &State.lpModule, 0L));
 
         /* play the module file */
-        printf("Playing: %s\n", State.pModule->szModuleName);
-        Assert(AOpenVoices(State.pModule->nTracks));
-        Assert(APlayModule(State.pModule));
-        Assert(ASetModuleVolume(State.nVolume));
+        printf("Playing: %s\n", State.lpModule->szModuleName);
+        Assert(AOpenVoices(State.lpModule->nTracks));
+        Assert(APlayModule(State.lpModule));
+        Assert(ASetAudioMixerValue(AUDIO_MIXER_MASTER_VOLUME, State.nVolume));
+#if defined(__WINDOWS__) || defined(__BEOS__)
+        printf("Press enter to quit\n");
+        getchar();
+#else
         while (!kbhit()) {
             Assert(AGetModuleStatus(&State.bStopped));
             if (State.bStopped) break;
             Assert(AUpdateAudio());
-        }
+	}
+#endif
         Assert(AStopModule());
         Assert(ACloseVoices());
 
         /* release the module file */
-        Assert(AFreeModuleFile(State.pModule));
+        Assert(AFreeModuleFile(State.lpModule));
     }
 
     return 0;

@@ -1,10 +1,17 @@
 /*
- * $Id: audio.h 1.12 1996/06/16 00:51:03 chasan released $
+ * $Id: audio.h 1.17 1996/09/25 17:13:02 chasan released $
+ *              1.18 1998/10/12 23:54:08 chasan released
+ *              1.19 1998/10/24 18:20:52 chasan released
+ *              1.20 1999/06/27 17:49:49 chasan released
  *
  * SEAL Synthetic Audio Library API Interface
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995, 1996, 1997, 1998, 1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #ifndef __AUDIO_H
@@ -14,7 +21,7 @@
 extern "C" {
 #endif
 
-#ifndef __FLAT__
+#ifndef WIN32
 #define AIAPI
 #else
 #define AIAPI __stdcall
@@ -23,60 +30,42 @@ extern "C" {
 #ifndef WINAPI
 
 /* atomic data types definitions */
-typedef void            VOID;
-typedef char            CHAR;
-typedef short           SHORT;
-typedef int             INT;
-typedef long            LONG;
-typedef int             BOOL;
-typedef unsigned char   UCHAR;
-typedef unsigned short  USHORT;
-typedef unsigned int    UINT;
-typedef unsigned long   ULONG;
-typedef VOID*           PVOID;
-typedef CHAR*           PCHAR;
-typedef SHORT*          PSHORT;
-typedef INT*            PINT;
-typedef LONG*           PLONG;
-typedef BOOL*           PBOOL;
-typedef UCHAR*          PUCHAR;
-typedef USHORT*         PUSHORT;
-typedef UINT*           PUINT;
-typedef ULONG*          PULONG;
-typedef CHAR*           PSZ;
-typedef ULONG           HANDLE;
+    typedef void            VOID;
+    typedef char            CHAR;
+    typedef int             INT;
+    typedef long            LONG;
+    typedef int             BOOL;
+
+    typedef unsigned char   BYTE;
+    typedef unsigned short  WORD;
+    typedef unsigned int    UINT;
+    typedef unsigned long   DWORD;
+
+    typedef VOID*           LPVOID;
+    typedef CHAR*           LPCHAR;
+    typedef INT*            LPINT;
+    typedef LONG*           LPLONG;
+    typedef BOOL*           LPBOOL;
+    typedef BYTE*           LPBYTE;
+    typedef WORD*           LPWORD;
+    typedef UINT*           LPUINT;
+    typedef DWORD*          LPDWORD;
+    typedef CHAR*           LPSTR;
+    typedef DWORD           HANDLE;
 
 /* helper macros */
-#define LOBYTE(s)       ((UCHAR)(s))
-#define HIBYTE(s)       ((UCHAR)((USHORT)(s)>>8))
-#define LOWORD(l)       ((USHORT)(l))
-#define HIWORD(l)       ((USHORT)((ULONG)(l)>>16))
-#define MAKEWORD(l,h)   ((USHORT)(((UCHAR)(l))|(((USHORT)((UCHAR)(h)))<<8)))
-#define MAKELONG(l,h)   ((ULONG)(((USHORT)(l))|(((ULONG)((USHORT)(h)))<<16)))
+#define LOBYTE(s)       ((BYTE)(s))
+#define HIBYTE(s)       ((BYTE)((WORD)(s)>>8))
+#define LOWORD(l)       ((WORD)(l))
+#define HIWORD(l)       ((WORD)((DWORD)(l)>>16))
+#define MAKEWORD(l,h)   ((WORD)(((BYTE)(l))|(((WORD)((BYTE)(h)))<<8)))
+#define MAKELONG(l,h)   ((DWORD)(((WORD)(l))|(((DWORD)((WORD)(h)))<<16)))
 
-#else
-#ifndef __FLAT__
-
-/* atomic data types definitions */
-typedef char            CHAR;
-typedef short           SHORT;
-typedef unsigned char   UCHAR;
-typedef unsigned short  USHORT;
-typedef unsigned long   ULONG;
-typedef SHORT*          PSHORT;
-typedef BOOL*           PBOOL;
-typedef UCHAR*          PUCHAR;
-typedef USHORT*         PUSHORT;
-typedef UINT*           PUINT;
-typedef ULONG*          PULONG;
-typedef CHAR*           PSZ;
-
-#endif
 #endif
 
 
 /* audio system version number */
-#define AUDIO_SYSTEM_VERSION            0x0100
+#define AUDIO_SYSTEM_VERSION            0x0106
 
 /* audio capabilities bit fields definitions */
 #define AUDIO_FORMAT_1M08               0x00000001
@@ -161,6 +150,19 @@ typedef CHAR*           PSZ;
 #define AUDIO_PRODUCT_LINUX             0x0101
 #define AUDIO_PRODUCT_SPARC             0x0102
 #define AUDIO_PRODUCT_SGI               0x0103
+#define AUDIO_PRODUCT_DSOUND            0x0104
+#define AUDIO_PRODUCT_OS2MMPM           0x0105
+#define AUDIO_PRODUCT_OS2DART           0x0106
+#define AUDIO_PRODUCT_BEOSR3            0x0107
+#define AUDIO_PRODUCT_BEOS              0x0108
+#define AUDIO_PRODUCT_QNX               0x0109
+
+/* audio mixer channels */
+#define AUDIO_MIXER_MASTER_VOLUME       0x0001
+#define AUDIO_MIXER_TREBLE              0x0002
+#define AUDIO_MIXER_BASS                0x0003
+#define AUDIO_MIXER_CHORUS              0x0004
+#define AUDIO_MIXER_REVERB              0x0005
 
 /* audio envelope bit fields */
 #define AUDIO_ENVELOPE_ON               0x0001
@@ -183,168 +185,190 @@ typedef CHAR*           PSZ;
 #pragma pack(1)
 
 /* audio capabilities structure */
-typedef struct {
-    USHORT  wProductId;                         /* product identifier */
-    CHAR    szProductName[30];                  /* product name */
-    ULONG   dwFormats;                          /* formats supported */
-} AUDIOCAPS, *PAUDIOCAPS;
+    typedef struct {
+	WORD    wProductId;                         /* product identifier */
+	CHAR    szProductName[30];                  /* product name */
+	DWORD   dwFormats;                          /* formats supported */
+    } AUDIOCAPS, *LPAUDIOCAPS;
 
 /* audio format structure */
-typedef struct {
-    UINT    nDeviceId;                          /* device identifier */
-    USHORT  wFormat;                            /* playback format */
-    USHORT  nSampleRate;                        /* sampling frequency */
-} AUDIOINFO, *PAUDIOINFO;
+    typedef struct {
+	UINT    nDeviceId;                          /* device identifier */
+	WORD    wFormat;                            /* playback format */
+	WORD    nSampleRate;                        /* sampling frequency */
+    } AUDIOINFO, *LPAUDIOINFO;
 
 /* audio waveform structure */
-typedef struct {
-    PUCHAR  pData;                              /* data pointer */
-    ULONG   dwHandle;                           /* waveform handle */
-    ULONG   dwLength;                           /* waveform length */
-    ULONG   dwLoopStart;                        /* loop start point */
-    ULONG   dwLoopEnd;                          /* loop end point */
-    USHORT  nSampleRate;                        /* sampling rate */
-    USHORT  wFormat;                            /* format bits */
-} AUDIOWAVE, *PAUDIOWAVE;
+    typedef struct {
+	LPBYTE  lpData;                             /* data pointer */
+	DWORD   dwHandle;                           /* waveform handle */
+	DWORD   dwLength;                           /* waveform length */
+	DWORD   dwLoopStart;                        /* loop start point */
+	DWORD   dwLoopEnd;                          /* loop end point */
+	WORD    nSampleRate;                        /* sampling rate */
+	WORD    wFormat;                            /* format bits */
+    } AUDIOWAVE, *LPAUDIOWAVE;
 
 
 /* audio envelope point structure */
-typedef struct {
-    USHORT  nFrame;                             /* envelope frame */
-    USHORT  nValue;                             /* envelope value */
-} AUDIOPOINT, *PAUDIOPOINT;
+    typedef struct {
+	WORD    nFrame;                             /* envelope frame */
+	WORD    nValue;                             /* envelope value */
+    } AUDIOPOINT, *LPAUDIOPOINT;
 
 /* audio envelope structure */
-typedef struct {
-    AUDIOPOINT aEnvelope[AUDIO_MAX_POINTS];     /* envelope points */
-    UCHAR   nPoints;                            /* number of points */
-    UCHAR   nSustain;                           /* sustain point */
-    UCHAR   nLoopStart;                         /* loop start point */
-    UCHAR   nLoopEnd;                           /* loop end point */
-    USHORT  wFlags;                             /* envelope flags */
-    USHORT  nSpeed;                             /* envelope speed */
-} AUDIOENVELOPE, *PAUDIOENVELOPE;
+    typedef struct {
+	AUDIOPOINT aEnvelope[AUDIO_MAX_POINTS];     /* envelope points */
+	BYTE    nPoints;                            /* number of points */
+	BYTE    nSustain;                           /* sustain point */
+	BYTE    nLoopStart;                         /* loop start point */
+	BYTE    nLoopEnd;                           /* loop end point */
+	WORD    wFlags;                             /* envelope flags */
+	WORD    nSpeed;                             /* envelope speed */
+    } AUDIOENVELOPE, *LPAUDIOENVELOPE;
 
 /* audio sample structure */
-typedef struct {
-    CHAR    szSampleName[32];                   /* sample name */
-    UCHAR   nVolume;                            /* default volume */
-    UCHAR   nPanning;                           /* default panning */
-    UCHAR   nRelativeNote;                      /* relative note */
-    UCHAR   nFinetune;                          /* finetune */
-    AUDIOWAVE Wave;                             /* waveform handle */
-} AUDIOSAMPLE, *PAUDIOSAMPLE;
+    typedef struct {
+	CHAR    szSampleName[32];                   /* sample name */
+	BYTE    nVolume;                            /* default volume */
+	BYTE    nPanning;                           /* default panning */
+	BYTE    nRelativeNote;                      /* relative note */
+	BYTE    nFinetune;                          /* finetune */
+	AUDIOWAVE Wave;                             /* waveform handle */
+    } AUDIOSAMPLE, *LPAUDIOSAMPLE;
 
 /* audio patch structure */
-typedef struct {
-    CHAR    szPatchName[32];                    /* patch name */
-    UCHAR   aSampleNumber[AUDIO_MAX_NOTES];     /* multi-sample table */
-    USHORT  nSamples;                           /* number of samples */
-    UCHAR   nVibratoType;                       /* vibrato type */
-    UCHAR   nVibratoSweep;                      /* vibrato sweep */
-    UCHAR   nVibratoDepth;                      /* vibrato depth */
-    UCHAR   nVibratoRate;                       /* vibrato rate */
-    USHORT  nVolumeFadeout;                     /* volume fadeout */
-    AUDIOENVELOPE Volume;                       /* volume envelope */
-    AUDIOENVELOPE Panning;                      /* panning envelope */
-    PAUDIOSAMPLE aSampleTable;                  /* sample table */
-} AUDIOPATCH, *PAUDIOPATCH;
+    typedef struct {
+	CHAR    szPatchName[32];                    /* patch name */
+	BYTE    aSampleNumber[AUDIO_MAX_NOTES];     /* multi-sample table */
+	WORD    nSamples;                           /* number of samples */
+	BYTE    nVibratoType;                       /* vibrato type */
+	BYTE    nVibratoSweep;                      /* vibrato sweep */
+	BYTE    nVibratoDepth;                      /* vibrato depth */
+	BYTE    nVibratoRate;                       /* vibrato rate */
+	WORD    nVolumeFadeout;                     /* volume fadeout */
+	AUDIOENVELOPE Volume;                       /* volume envelope */
+	AUDIOENVELOPE Panning;                      /* panning envelope */
+	LPAUDIOSAMPLE aSampleTable;                 /* sample table */
+    } AUDIOPATCH, *LPAUDIOPATCH;
 
 /* audio pattern structure */
-typedef struct {
-    USHORT  nPacking;                           /* packing type */
-    USHORT  nTracks;                            /* number of tracks */
-    USHORT  nRows;                              /* number of rows */
-    USHORT  nSize;                              /* data size */
-    PUCHAR  pData;                              /* data pointer */
-} AUDIOPATTERN, *PAUDIOPATTERN;
+    typedef struct {
+	WORD    nPacking;                           /* packing type */
+	WORD    nTracks;                            /* number of tracks */
+	WORD    nRows;                              /* number of rows */
+	WORD    nSize;                              /* data size */
+	LPBYTE  lpData;                             /* data pointer */
+    } AUDIOPATTERN, *LPAUDIOPATTERN;
 
 /* audio module structure */
-typedef struct {
-    CHAR    szModuleName[32];                   /* module name */
-    USHORT  wFlags;                             /* module flags */
-    USHORT  nOrders;                            /* number of orders */
-    USHORT  nRestart;                           /* restart position */
-    USHORT  nTracks;                            /* number of tracks */
-    USHORT  nPatterns;                          /* number of patterns */
-    USHORT  nPatches;                           /* number of patches */
-    USHORT  nTempo;                             /* initial tempo */
-    USHORT  nBPM;                               /* initial BPM */
-    UCHAR   aOrderTable[AUDIO_MAX_ORDERS];      /* order table */
-    UCHAR   aPanningTable[AUDIO_MAX_VOICES];    /* panning table */
-    PAUDIOPATTERN aPatternTable;                /* pattern table */
-    PAUDIOPATCH aPatchTable;                    /* patch table */
-} AUDIOMODULE, *PAUDIOMODULE;
+    typedef struct {
+	CHAR    szModuleName[32];                   /* module name */
+	WORD    wFlags;                             /* module flags */
+	WORD    nOrders;                            /* number of orders */
+	WORD    nRestart;                           /* restart position */
+	WORD    nTracks;                            /* number of tracks */
+	WORD    nPatterns;                          /* number of patterns */
+	WORD    nPatches;                           /* number of patches */
+	WORD    nTempo;                             /* initial tempo */
+	WORD    nBPM;                               /* initial BPM */
+	BYTE    aOrderTable[AUDIO_MAX_ORDERS];      /* order table */
+	BYTE    aPanningTable[AUDIO_MAX_VOICES];    /* panning table */
+	LPAUDIOPATTERN aPatternTable;               /* pattern table */
+	LPAUDIOPATCH aPatchTable;                   /* patch table */
+    } AUDIOMODULE, *LPAUDIOMODULE;
+
+/* audio music track structure */
+    typedef struct {
+	BYTE   nNote;                              /* note index */
+	BYTE   nPatch;                             /* patch number */
+	BYTE   nSample;                            /* sample number */
+	BYTE   nCommand;                           /* effect command */
+	BYTE   bParams;                            /* effect params */
+	BYTE   nVolumeCmd;                         /* volume command */
+	BYTE   nVolume;                            /* volume level */
+	BYTE   nPanning;                           /* stereo panning */
+	LONG   dwFrequency;                        /* note frequency */
+	WORD   wPeriod;                            /* note period */
+    } AUDIOTRACK, *LPAUDIOTRACK;
 
 /* audio callback function defines */
-typedef VOID (AIAPI* PFNAUDIOWAVE)(PUCHAR, UINT);
-typedef VOID (AIAPI* PFNAUDIOTIMER)(VOID);
+    typedef VOID (AIAPI* LPFNAUDIOWAVE)(LPBYTE, UINT);
+    typedef VOID (AIAPI* LPFNAUDIOTIMER)(VOID);
+    typedef VOID (AIAPI* LPFNAUDIOCALLBACK)(BYTE, UINT, UINT);
 
 /* audio handle defines */
-typedef HANDLE  HAC;
-typedef HAC*    PHAC;
+    typedef HANDLE  HAC;
+    typedef HAC*    LPHAC;
 
 #pragma pack()
 
-
 /* audio interface API prototypes */
-UINT AIAPI AInitialize(VOID);
-UINT AIAPI AGetVersion(VOID);
-UINT AIAPI AGetAudioNumDevs(VOID);
-UINT AIAPI AGetAudioDevCaps(UINT nDeviceId, PAUDIOCAPS pCaps);
-UINT AIAPI AGetErrorText(UINT nErrorCode, PSZ pText, UINT nSize);
+    UINT AIAPI AInitialize(VOID);
+    UINT AIAPI AGetVersion(VOID);
+    UINT AIAPI AGetAudioNumDevs(VOID);
+    UINT AIAPI AGetAudioDevCaps(UINT nDeviceId, LPAUDIOCAPS lpCaps);
+    UINT AIAPI AGetErrorText(UINT nErrorCode, LPSTR lpText, UINT nSize);
 
-UINT AIAPI APingAudio(PUINT pnDeviceId);
-UINT AIAPI AOpenAudio(PAUDIOINFO pInfo);
-UINT AIAPI ACloseAudio(VOID);
-UINT AIAPI AUpdateAudio(VOID);
+    UINT AIAPI APingAudio(LPUINT lpnDeviceId);
+    UINT AIAPI AOpenAudio(LPAUDIOINFO lpInfo);
+    UINT AIAPI ACloseAudio(VOID);
+    UINT AIAPI AUpdateAudio(VOID);
+    UINT AIAPI AUpdateAudioEx(UINT nFrames);
 
-UINT AIAPI AOpenVoices(UINT nVoices);
-UINT AIAPI ACloseVoices(VOID);
+    UINT AIAPI ASetAudioMixerValue(UINT nChannel, UINT nValue);
 
-UINT AIAPI ASetAudioCallback(PFNAUDIOWAVE pfnAudioWave);
-UINT AIAPI ASetAudioTimerProc(PFNAUDIOTIMER pfnAudioTimer);
-UINT AIAPI ASetAudioTimerRate(UINT nTimerRate);
+    UINT AIAPI AOpenVoices(UINT nVoices);
+    UINT AIAPI ACloseVoices(VOID);
 
-LONG AIAPI AGetAudioDataAvail(VOID);
-UINT AIAPI ACreateAudioData(PAUDIOWAVE pWave);
-UINT AIAPI ADestroyAudioData(PAUDIOWAVE pWave);
-UINT AIAPI AWriteAudioData(PAUDIOWAVE pWave, ULONG dwOffset, UINT nCount);
+    UINT AIAPI ASetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave);
+    UINT AIAPI ASetAudioTimerProc(LPFNAUDIOTIMER lpfnAudioTimer);
+    UINT AIAPI ASetAudioTimerRate(UINT nTimerRate);
 
-UINT AIAPI ACreateAudioVoice(PHAC phVoice);
-UINT AIAPI ADestroyAudioVoice(HAC hVoice);
+    LONG AIAPI AGetAudioDataAvail(VOID);
+    UINT AIAPI ACreateAudioData(LPAUDIOWAVE lpWave);
+    UINT AIAPI ADestroyAudioData(LPAUDIOWAVE lpWave);
+    UINT AIAPI AWriteAudioData(LPAUDIOWAVE lpWave, DWORD dwOffset, UINT nCount);
 
-UINT AIAPI APlayVoice(HAC hVoice, PAUDIOWAVE pWave);
-UINT AIAPI APrimeVoice(HAC hVoice, PAUDIOWAVE pWave);
-UINT AIAPI AStartVoice(HAC hVoice);
-UINT AIAPI AStopVoice(HAC hVoice);
+    UINT AIAPI ACreateAudioVoice(LPHAC lphVoice);
+    UINT AIAPI ADestroyAudioVoice(HAC hVoice);
 
-UINT AIAPI ASetVoicePosition(HAC hVoice, LONG dwPosition);
-UINT AIAPI ASetVoiceFrequency(HAC hVoice, LONG dwFrequency);
-UINT AIAPI ASetVoiceVolume(HAC hVoice, UINT nVolume);
-UINT AIAPI ASetVoicePanning(HAC hVoice, UINT nPanning);
+    UINT AIAPI APlayVoice(HAC hVoice, LPAUDIOWAVE lpWave);
+    UINT AIAPI APrimeVoice(HAC hVoice, LPAUDIOWAVE lpWave);
+    UINT AIAPI AStartVoice(HAC hVoice);
+    UINT AIAPI AStopVoice(HAC hVoice);
 
-UINT AIAPI AGetVoicePosition(HAC hVoice, PLONG pdwPosition);
-UINT AIAPI AGetVoiceFrequency(HAC hVoice, PLONG pdwFrequency);
-UINT AIAPI AGetVoiceVolume(HAC hVoice, PUINT pnVolume);
-UINT AIAPI AGetVoicePanning(HAC hVoice, PUINT pnPanning);
-UINT AIAPI AGetVoiceStatus(HAC hVoice, PBOOL pnStatus);
+    UINT AIAPI ASetVoicePosition(HAC hVoice, LONG dwPosition);
+    UINT AIAPI ASetVoiceFrequency(HAC hVoice, LONG dwFrequency);
+    UINT AIAPI ASetVoiceVolume(HAC hVoice, UINT nVolume);
+    UINT AIAPI ASetVoicePanning(HAC hVoice, UINT nPanning);
 
-UINT AIAPI APlayModule(PAUDIOMODULE pModule);
-UINT AIAPI AStopModule(VOID);
-UINT AIAPI APauseModule(VOID);
-UINT AIAPI AResumeModule(VOID);
-UINT AIAPI ASetModuleVolume(UINT nVolume);
-UINT AIAPI ASetModulePosition(UINT nOrder, UINT nRow);
-UINT AIAPI AGetModuleVolume(PUINT pnVolume);
-UINT AIAPI AGetModulePosition(PUINT pnOrder, PUINT pnRow);
-UINT AIAPI AGetModuleStatus(PBOOL pnStatus);
+    UINT AIAPI AGetVoicePosition(HAC hVoice, LPLONG lpdwPosition);
+    UINT AIAPI AGetVoiceFrequency(HAC hVoice, LPLONG lpdwFrequency);
+    UINT AIAPI AGetVoiceVolume(HAC hVoice, LPUINT lpnVolume);
+    UINT AIAPI AGetVoicePanning(HAC hVoice, LPUINT lpnPanning);
+    UINT AIAPI AGetVoiceStatus(HAC hVoice, LPBOOL lpnStatus);
 
-UINT AIAPI ALoadModuleFile(PSZ pszFileName, PAUDIOMODULE* ppModule);
-UINT AIAPI AFreeModuleFile(PAUDIOMODULE pModule);
+    UINT AIAPI APlayModule(LPAUDIOMODULE lpModule);
+    UINT AIAPI AStopModule(VOID);
+    UINT AIAPI APauseModule(VOID);
+    UINT AIAPI AResumeModule(VOID);
+    UINT AIAPI ASetModuleVolume(UINT nVolume);
+    UINT AIAPI ASetModulePosition(UINT nOrder, UINT nRow);
+    UINT AIAPI AGetModuleVolume(LPUINT lpnVolume);
+    UINT AIAPI AGetModulePosition(LPUINT pnOrder, LPUINT lpnRow);
+    UINT AIAPI AGetModuleStatus(LPBOOL lpnStatus);
+    UINT AIAPI ASetModuleCallback(LPFNAUDIOCALLBACK lpfnAudioCallback);
 
-UINT AIAPI ALoadWaveFile(PSZ pszFileName, PAUDIOWAVE* ppWave);
-UINT AIAPI AFreeWaveFile(PAUDIOWAVE pWave);
+    UINT AIAPI ALoadModuleFile(LPSTR lpszFileName, 
+			       LPAUDIOMODULE* lplpModule, DWORD dwFileOffset);
+    UINT AIAPI AFreeModuleFile(LPAUDIOMODULE lpModule);
+
+    UINT AIAPI ALoadWaveFile(LPSTR lpszFileName, 
+			     LPAUDIOWAVE* lplpWave, DWORD dwFileOffset);
+    UINT AIAPI AFreeWaveFile(LPAUDIOWAVE lpWave);
+
+    UINT AIAPI AGetModuleTrack(UINT nTrack, LPAUDIOTRACK lpTrack);
 
 #ifdef __cplusplus
 };

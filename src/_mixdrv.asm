@@ -1,10 +1,15 @@
 ;*
-;* $Id: _mixdrv.asm 1.7 1996/05/31 02:15:04 chasan released $
+;* $Id: _mixdrv.asm 1.8 1996/08/15 02:33:23 chasan released $
 ;*
 ;* Low-level assembly resampling and quantization routines.
 ;* Optimized for superscalar architecture of Pentium processors.
 ;*
-;* Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+;* Copyright (C) 1995-1999 Carlos Hasan
+;*
+;* This program is free software; you can redistribute it and/or modify
+;* it under the terms of the GNU Lesser General Public License as published
+;* by the Free Software Foundation; either version 2 of the License, or
+;* (at your option) any later version.
 ;*
 
         .386p
@@ -12,7 +17,7 @@
 
 ; voice structure field offsets
 Voice   struc
-PDATA           dd      ?
+LPDATA          dd      ?
 ACCUM           dd      ?
 PITCH           dd      ?
 LOOPSTART       dd      ?
@@ -29,8 +34,8 @@ ACCURACY        equ     0ch
 
         .data
 
-        extrn   _pVolumeTable:dword
-        extrn   _pFilterTable:dword
+        extrn   _lpVolumeTable:dword
+        extrn   _lpFilterTable:dword
 
         align   4
 nCount          dd      ?
@@ -77,7 +82,7 @@ nStepHi         dd      ?
 
 
 ;
-; VOID stdcall QuantAudioData08(PVOID pBuffer, PLONG pData, UINT nCount)
+; VOID cdecl QuantAudioData08(LPVOID lpBuffer, LPLONG lpData, UINT nCount)
 ;
         align   4
 
@@ -116,7 +121,7 @@ L2:     add     esi,4
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
         align   4
 L3:     xor     eax,eax
         jmp     L2
@@ -127,7 +132,7 @@ QuantAudioData08 endp
 
 
 ;
-; VOID stdcall QuantAudioData16(PVOID pBuffer, PLONG pData, UINT nCount)
+; VOID cdecl QuantAudioData16(LPVOID lpBuffer, LPLONG lpData, UINT nCount)
 ;
         align  4
 QuantAudioData16 proc
@@ -165,7 +170,7 @@ L6:     add     esi,4
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
         align   4
 L7:     mov     eax,ebx
         jmp     L6
@@ -178,7 +183,7 @@ QuantAudioData16 endp
 ;=========================== 8 bit mixing routines ===========================
 
 ;
-; VOID stdcall MixAudioData08M(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData08M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align   4
 MixAudioData08M proc
@@ -203,11 +208,11 @@ __MixAudioData08M:
         mov     ecx,[esi+ACCUM]         ; get voice parameters
         mov     ebp,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shl     ebx,10                  ; get volume table address
         push    esi
         mov     eax,ecx
-        add     ebx,[_pVolumeTable]      ; convert accumulator and pitch
+        add     ebx,[_lpVolumeTable]    ; convert accumulator and pitch
         sar     eax,ACCURACY            ; to 32.32 fixed point
         shr     ebx,2
         shl     ecx,32-ACCURACY
@@ -279,7 +284,7 @@ L08M:   RESAMPLE08M 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL08M  dd      offset E08M15
@@ -302,7 +307,7 @@ MixAudioData08M endp
 
 
 ;
-; VOID stdcall MixAudioData08S(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData08S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align  4
 MixAudioData08S proc
@@ -344,7 +349,7 @@ MixAudioPan08S proc
         mov     edx,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
         movzx   ecx,[esi+PANNING]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
 
         push    esi                     ; get volume table addresses
         imul    ecx,ebx
@@ -352,8 +357,8 @@ MixAudioPan08S proc
         sub     ebx,ecx
         shl     ebx,10
         shl     ecx,10
-        add     ebx,[_pVolumeTable]
-        add     ecx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
+        add     ecx,[_lpVolumeTable]
         shr     ebx,2
         shr     ecx,2
 
@@ -437,7 +442,7 @@ L08S:   RESAMPLE08S 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL08S  dd      offset E08S15
@@ -476,11 +481,11 @@ MixAudioLeft08S proc
         mov     ecx,[esi+ACCUM]         ; get voice parameters
         mov     ebp,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shl     ebx,10                  ; get volume table address
         push    esi
         mov     eax,ecx
-        add     ebx,[_pVolumeTable]      ; convert accumulator and pitch
+        add     ebx,[_lpVolumeTable]    ; convert accumulator and pitch
         sar     eax,ACCURACY            ; to 32.32 fixed point
         shr     ebx,2
         shl     ecx,32-ACCURACY
@@ -552,7 +557,7 @@ L08L:   RESAMPLE08L 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL08L  dd      offset E08L15
@@ -583,12 +588,12 @@ MixAudioMiddle08S proc
         mov     ecx,[esi+ACCUM]         ; get voice parameters
         mov     ebp,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shr     ebx,1
         shl     ebx,10                  ; get volume table address
         push    esi
         mov     eax,ecx
-        add     ebx,[_pVolumeTable]      ; convert accumulator and pitch
+        add     ebx,[_lpVolumeTable]    ; convert accumulator and pitch
         sar     eax,ACCURACY            ; to 32.32 fixed point
         shr     ebx,2
         shl     ecx,32-ACCURACY
@@ -663,7 +668,7 @@ L08C:   RESAMPLE08C 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL08C  dd      offset E08C15
@@ -687,7 +692,7 @@ MixAudioMiddle08S endp
 
 
 ;
-; VOID stdcall MixAudioData08MI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData08MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align  4
 MixAudioData08MI proc
@@ -718,11 +723,11 @@ _MixAudioData08MI@12:
         mov     ecx,[esi+PITCH]         ; get pitch
         movzx   ebx,[esi+VOLUME]        ; get volume
         mov     dl,[esi+RESERVED]       ; get last sample
-        mov     esi,[esi+PDATA]         ; get data address
+        mov     esi,[esi+LPDATA]        ; get data address
         push    esi
 
         shl     ebx,10                  ; get volume table address
-        add     ebx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
         shr     ebx,2
         mov     bl,dl                   ; save sample for filtering
 
@@ -741,7 +746,7 @@ _MixAudioData08MI@12:
         neg     edx
 L10:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
 
         mov     eax,[nCount]            ; jump inside of the loop
         and     eax,0fh
@@ -797,7 +802,7 @@ L08MI:  RESAMPLE08MI 0                  ; 11 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL08MI dd      offset E08MI15
@@ -819,7 +824,7 @@ TBL08MI dd      offset E08MI15
 MixAudioData08MI endp
 
 ;
-; VOID stdcall MixAudioData08SI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData08SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align  4
 MixAudioData08SI proc
@@ -868,7 +873,7 @@ MixAudioPan08SI proc
         movzx   ebx,[esi+VOLUME]
         movzx   ecx,[esi+PANNING]
         mov     al,[esi+RESERVED]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
 
         push    esi                     ; get volume table addresses
         imul    ecx,ebx
@@ -876,8 +881,8 @@ MixAudioPan08SI proc
         sub     ebx,ecx
         shl     ebx,10
         shl     ecx,10
-        add     ebx,[_pVolumeTable]
-        add     ecx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
+        add     ecx,[_lpVolumeTable]
         shr     ebx,2
         shr     ecx,2
         mov     bl,al                   ; save sample for filtering
@@ -893,7 +898,7 @@ MixAudioPan08SI proc
         neg     edx
 L11:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
         push    eax
         shl     eax,32-ACCURACY
         mov     [nStepLo],eax
@@ -960,7 +965,7 @@ L08PI:  RESAMPLE08PI 0                  ; 15 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL08PI dd      offset E08PI15
@@ -1000,11 +1005,11 @@ MixAudioLeft08SI proc
         mov     ecx,[esi+PITCH]         ; get pitch
         movzx   ebx,[esi+VOLUME]        ; get volume
         mov     dl,[esi+RESERVED]       ; get last sample
-        mov     esi,[esi+PDATA]         ; get data address
+        mov     esi,[esi+LPDATA]        ; get data address
         push    esi
 
         shl     ebx,10                  ; get volume table address
-        add     ebx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
         shr     ebx,2
         mov     bl,dl                   ; save sample for filtering
 
@@ -1023,7 +1028,7 @@ MixAudioLeft08SI proc
         neg     edx
 L12:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
 
         mov     eax,[nCount]            ; jump inside of the loop
         and     eax,0fh
@@ -1079,7 +1084,7 @@ L08LI:  RESAMPLE08LI 0                  ; 11 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL08LI dd      offset E08LI15
@@ -1112,12 +1117,12 @@ MixAudioMiddle08SI proc
         mov     ecx,[esi+PITCH]         ; get pitch
         movzx   ebx,[esi+VOLUME]        ; get volume
         mov     dl,[esi+RESERVED]       ; get last sample
-        mov     esi,[esi+PDATA]         ; get data address
+        mov     esi,[esi+LPDATA]        ; get data address
         push    esi
 
         shr     ebx,1                   ; get volume table address
         shl     ebx,10
-        add     ebx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
         shr     ebx,2
         mov     bl,dl                   ; save sample for filtering
 
@@ -1136,7 +1141,7 @@ MixAudioMiddle08SI proc
         neg     edx
 L13:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
 
         mov     eax,[nCount]            ; jump inside of the loop
         and     eax,0fh
@@ -1193,7 +1198,7 @@ L08CI:  RESAMPLE08CI 0                  ; 14 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL08CI dd      offset E08CI15
@@ -1217,7 +1222,7 @@ MixAudioMiddle08SI endp
 ;========================= fake 16 bit mixing routines ========================;
 
 ;
-; VOID stdcall MixAudioData16M(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData16M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align   4
 MixAudioData16M proc
@@ -1242,12 +1247,12 @@ __MixAudioData16M:
         mov     ecx,[esi+ACCUM]         ; get voice parameters
         mov     ebp,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shr     esi,1
         shl     ebx,10                  ; get volume table address
         push    esi
         mov     eax,ecx
-        add     ebx,[_pVolumeTable]     ; convert accumulator and pitch
+        add     ebx,[_lpVolumeTable]    ; convert accumulator and pitch
         sar     eax,ACCURACY            ; to 32.32 fixed point
         shr     ebx,2
         shl     ecx,32-ACCURACY
@@ -1319,7 +1324,7 @@ L16M:   RESAMPLE16M 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL16M  dd      offset E16M15
@@ -1342,7 +1347,7 @@ MixAudioData16M endp
 
 
 ;
-; VOID stdcall MixAudioData16S(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData16S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align  4
 MixAudioData16S proc
@@ -1384,7 +1389,7 @@ MixAudioPan16S proc
         mov     edx,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
         movzx   ecx,[esi+PANNING]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shr     esi,1
 
         push    esi                     ; get volume table addresses
@@ -1393,8 +1398,8 @@ MixAudioPan16S proc
         sub     ebx,ecx
         shl     ebx,10
         shl     ecx,10
-        add     ebx,[_pVolumeTable]
-        add     ecx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
+        add     ecx,[_lpVolumeTable]
         shr     ebx,2
         shr     ecx,2
 
@@ -1478,7 +1483,7 @@ L16S:   RESAMPLE16S 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL16S  dd      offset E16S15
@@ -1517,12 +1522,12 @@ MixAudioLeft16S proc
         mov     ecx,[esi+ACCUM]         ; get voice parameters
         mov     ebp,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shr     esi,1
         shl     ebx,10                  ; get volume table address
         push    esi
         mov     eax,ecx
-        add     ebx,[_pVolumeTable]     ; convert accumulator and pitch
+        add     ebx,[_lpVolumeTable]    ; convert accumulator and pitch
         sar     eax,ACCURACY            ; to 32.32 fixed point
         shr     ebx,2
         shl     ecx,32-ACCURACY
@@ -1594,7 +1599,7 @@ L16L:   RESAMPLE16L 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL16L  dd      offset E16L15
@@ -1625,13 +1630,13 @@ MixAudioMiddle16S proc
         mov     ecx,[esi+ACCUM]         ; get voice parameters
         mov     ebp,[esi+PITCH]
         movzx   ebx,[esi+VOLUME]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shr     esi,1
         shr     ebx,1
         shl     ebx,10                  ; get volume table address
         push    esi
         mov     eax,ecx
-        add     ebx,[_pVolumeTable]     ; convert accumulator and pitch
+        add     ebx,[_lpVolumeTable]    ; convert accumulator and pitch
         sar     eax,ACCURACY            ; to 32.32 fixed point
         shr     ebx,2
         shl     ecx,32-ACCURACY
@@ -1706,7 +1711,7 @@ L16C:   RESAMPLE16C 0
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align   4
 TBL16C  dd      offset E16C15
@@ -1730,7 +1735,7 @@ MixAudioMiddle16S endp
 
 
 ;
-; VOID stdcall MixAudioData16MI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData16MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align  4
 MixAudioData16MI proc
@@ -1761,12 +1766,12 @@ _MixAudioData16MI@12:
         mov     ecx,[esi+PITCH]         ; get pitch
         movzx   ebx,[esi+VOLUME]        ; get volume
         mov     dl,[esi+RESERVED]       ; get last sample
-        mov     esi,[esi+PDATA]         ; get data address
+        mov     esi,[esi+LPDATA]        ; get data address
         shr     esi,1
         push    esi
 
         shl     ebx,10                  ; get volume table address
-        add     ebx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
         shr     ebx,2
         mov     bl,dl                   ; save sample for filtering
 
@@ -1785,7 +1790,7 @@ _MixAudioData16MI@12:
         neg     edx
 L20:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
 
         mov     eax,[nCount]            ; jump inside of the loop
         and     eax,0fh
@@ -1841,7 +1846,7 @@ L16MI:  RESAMPLE16MI 0                  ; 11 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL16MI dd      offset E16MI15
@@ -1863,7 +1868,7 @@ TBL16MI dd      offset E16MI15
 MixAudioData16MI endp
 
 ;
-; VOID stdcall MixAudioData16SI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+; VOID cdecl MixAudioData16SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 ;
         align  4
 MixAudioData16SI proc
@@ -1912,7 +1917,7 @@ MixAudioPan16SI proc
         movzx   ebx,[esi+VOLUME]
         movzx   ecx,[esi+PANNING]
         mov     al,[esi+RESERVED]
-        mov     esi,[esi+PDATA]
+        mov     esi,[esi+LPDATA]
         shr     esi,1
 
         push    esi                     ; get volume table addresses
@@ -1921,8 +1926,8 @@ MixAudioPan16SI proc
         sub     ebx,ecx
         shl     ebx,10
         shl     ecx,10
-        add     ebx,[_pVolumeTable]
-        add     ecx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
+        add     ecx,[_lpVolumeTable]
         shr     ebx,2
         shr     ecx,2
         mov     bl,al                   ; save sample for filtering
@@ -1938,7 +1943,7 @@ MixAudioPan16SI proc
         neg     edx
 L21:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
         push    eax
         shl     eax,32-ACCURACY
         mov     [nStepLo],eax
@@ -2005,7 +2010,7 @@ L16PI:  RESAMPLE16PI 0                  ; 15 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL16PI dd      offset E16PI15
@@ -2045,12 +2050,12 @@ MixAudioLeft16SI proc
         mov     ecx,[esi+PITCH]         ; get pitch
         movzx   ebx,[esi+VOLUME]        ; get volume
         mov     dl,[esi+RESERVED]       ; get last sample
-        mov     esi,[esi+PDATA]         ; get data address
+        mov     esi,[esi+LPDATA]        ; get data address
         shr     esi,1
         push    esi
 
         shl     ebx,10                  ; get volume table address
-        add     ebx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
         shr     ebx,2
         mov     bl,dl                   ; save sample for filtering
 
@@ -2069,7 +2074,7 @@ MixAudioLeft16SI proc
         neg     edx
 L22:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
 
         mov     eax,[nCount]            ; jump inside of the loop
         and     eax,0fh
@@ -2125,7 +2130,7 @@ L16LI:  RESAMPLE16LI 0                  ; 11 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL16LI dd      offset E16LI15
@@ -2158,13 +2163,13 @@ MixAudioMiddle16SI proc
         mov     ecx,[esi+PITCH]         ; get pitch
         movzx   ebx,[esi+VOLUME]        ; get volume
         mov     dl,[esi+RESERVED]       ; get last sample
-        mov     esi,[esi+PDATA]         ; get data address
+        mov     esi,[esi+LPDATA]        ; get data address
         shr     esi,1
         push    esi
 
         shr     ebx,1                   ; get volume table address
         shl     ebx,10
-        add     ebx,[_pVolumeTable]
+        add     ebx,[_lpVolumeTable]
         shr     ebx,2
         mov     bl,dl                   ; save sample for filtering
 
@@ -2183,7 +2188,7 @@ MixAudioMiddle16SI proc
         neg     edx
 L23:    shr     edx,ACCURACY-5
         shl     edx,8
-        add     edx,[_pFilterTable]
+        add     edx,[_lpFilterTable]
 
         mov     eax,[nCount]            ; jump inside of the loop
         and     eax,0fh
@@ -2240,7 +2245,7 @@ L16CI:  RESAMPLE16CI 0                  ; 14 cycles/sample
         pop     ebx
         pop     eax
         pop     ebp
-        ret     12
+        ret
 
         align  4
 TBL16CI dd      offset E16CI15

@@ -1,0 +1,37 @@
+#!/bin/sh
+
+case `uname -sr` in
+  IRIX\ 4.0.*)
+     CC=gcc
+     STRIP=strip
+     LIBS="-L../lib/Indigo -laudio -lm" ;;
+  SunOS\ 4.1.*)
+     CC=gcc
+     STRIP=strip
+     LIBS="-L../lib/SunOS -laudio -lm" ;;
+  SunOS\ 5.*)
+     CC=gcc
+     STRIP=strip
+     LIBS="-L../lib/Solaris -laudio -lm" ;;
+  Linux*)
+     CC=gcc
+     STRIP=strip
+     LIBS="-L../lib/Linux -laudio -lm" ;;
+  FreeBSD*)
+     CC=gcc
+     STRIP=strip
+     LIBS="-L../lib/FreeBSD -laudio -lm" ;;
+  BeOS*)
+     CC=gcc
+     STRIP=true
+     LIBS="-L../lib/BeOS -laudio -lroot -lbe -lmedia" ;;
+  *) 
+     echo "This program has not been tested on your machine!"
+     exit
+esac
+
+for f in 1 2 3 4 5 6; do
+    echo "compiling example$f.c"
+    $CC -I../include -o example$f example$f.c $LIBS
+    $STRIP example$f
+done

@@ -1,10 +1,14 @@
 /*
- * $Id: s3mfile.c 1.4 1996/06/02 01:18:42 chasan released $
+ * $Id: s3mfile.c 1.7 1996/09/13 15:10:01 chasan released $
  *
  * Scream Tracker 3.0 module file loader routines.
  *
- * Copyright (c) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (c) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -30,55 +34,55 @@
 
 typedef struct {
     CHAR    aModuleName[28];
-    UCHAR   bPadding;
-    UCHAR   nFileType;
-    USHORT  wReserved;
-    USHORT  nSongLength;
-    USHORT  nSamples;
-    USHORT  nPatterns;
-    USHORT  wFlags;
-    USHORT  wVersion;
-    USHORT  nSampleType;
-    ULONG   dwSCRM;
-    UCHAR   nGlobalVolume;
-    UCHAR   nTempo;
-    UCHAR   nBPM;
-    UCHAR   nMasterVolume;
-    UCHAR   nUltraClick;
-    UCHAR   nDefaultPanning;
-    UCHAR   aReserved[8];
-    USHORT  wSpecial;
-    UCHAR   aChannelTable[32];
+    BYTE    bPadding;
+    BYTE    nFileType;
+    WORD    wReserved;
+    WORD    nSongLength;
+    WORD    nSamples;
+    WORD    nPatterns;
+    WORD    wFlags;
+    WORD    wVersion;
+    WORD    nSampleType;
+    DWORD   dwSCRM;
+    BYTE    nGlobalVolume;
+    BYTE    nTempo;
+    BYTE    nBPM;
+    BYTE    nMasterVolume;
+    BYTE    nUltraClick;
+    BYTE    nDefaultPanning;
+    BYTE    aReserved[8];
+    WORD    wSpecial;
+    BYTE    aChannelTable[32];
 } S3MFILEHEADER;
 
 typedef struct {
-    UCHAR   nType;
+    BYTE    nType;
     CHAR    aFileName[13];
-    USHORT  wDataSegPtr;
-    ULONG   dwLength;
-    ULONG   dwLoopStart;
-    ULONG   dwLoopEnd;
-    UCHAR   nVolume;
-    UCHAR   nReserved;
-    UCHAR   nPacking;
-    UCHAR   bFlags;
-    ULONG   nSampleRate;
-    UCHAR   aReserved[12];
+    WORD    wDataSegPtr;
+    DWORD   dwLength;
+    DWORD   dwLoopStart;
+    DWORD   dwLoopEnd;
+    BYTE    nVolume;
+    BYTE    nReserved;
+    BYTE    nPacking;
+    BYTE    bFlags;
+    DWORD   nSampleRate;
+    BYTE    aReserved[12];
     CHAR    aSampleName[28];
-    ULONG   dwSCRS;
+    DWORD   dwSCRS;
 } S3MSAMPLEHEADER;
 
 typedef struct {
-    USHORT  nSize;
-    PUCHAR  pData;
+    WORD    nSize;
+    LPBYTE  lpData;
 } S3MPATTERNHEADER;
 
 typedef struct {
-    UCHAR   nNote;
-    UCHAR   nSample;
-    UCHAR   nVolume;
-    UCHAR   nCommand;
-    UCHAR   nParams;
+    BYTE    nNote;
+    BYTE    nSample;
+    BYTE    nVolume;
+    BYTE    nCommand;
+    BYTE    nParams;
 } S3MTRACKDATA;
 
 
@@ -109,34 +113,34 @@ static LONG S3MGetRelativeNote(LONG dwSampleRate)
         dwRelativeNote += (12L << ACC);
     }
     dwRelativeNote += A + MUL(B + MUL(C + MUL(D + MUL(E, dwSampleRate),
-        dwSampleRate), dwSampleRate), dwSampleRate);
+					      dwSampleRate), dwSampleRate), dwSampleRate);
     return dwRelativeNote >> (ACC - 7);
 }
 
-static UINT S3MDecodePattern(UINT nTracks, PUCHAR pData, UINT nSize,
-    UCHAR aMappingTable[], PAUDIOPATTERN pPattern)
+static UINT S3MDecodePattern(UINT nTracks, LPBYTE lpData, UINT nSize,
+			     BYTE aMappingTable[], LPAUDIOPATTERN lpPattern)
 {
     static S3MTRACKDATA aTrackTable[S3M_MAX_TRACKS];
-    static UCHAR aParamTable[S3M_MAX_TRACKS];
+    static BYTE aParamTable[S3M_MAX_TRACKS];
     UINT nRow, nTrack, nFlags, nNote, nSample, nVolume, nCommand, nParams;
-    PUCHAR pFTData, pEndData;
+    LPBYTE lpFTData, lpEndData;
 
     /* initialize the pattern structure */
-    pPattern->nPacking = 0;
-    pPattern->nTracks = nTracks;
-    pPattern->nRows = S3M_MAX_ROWS;
-    pPattern->nSize = 0;
-    if ((pPattern->pData = malloc(nTracks * 6 * S3M_MAX_ROWS)) == NULL) {
+    lpPattern->nPacking = 0;
+    lpPattern->nTracks = nTracks;
+    lpPattern->nRows = S3M_MAX_ROWS;
+    lpPattern->nSize = 0;
+    if ((lpPattern->lpData = malloc(nTracks * 6 * S3M_MAX_ROWS)) == NULL) {
         return AUDIO_ERROR_NOMEMORY;
     }
 
-    pFTData = pPattern->pData;
-    pEndData = pData + nSize;
+    lpFTData = lpPattern->lpData;
+    lpEndData = lpData + nSize;
     memset(aParamTable, 0, sizeof(aParamTable));
     for (nRow = 0; nRow < S3M_MAX_ROWS; nRow++) {
         /* grab the next row of notes from the S3M pattern */
         memset(aTrackTable, 0, sizeof(aTrackTable));
-        while (pData < pEndData && (nFlags = *pData++) != 0x00) {
+        while (lpData < lpEndData && (nFlags = *lpData++) != 0x00) {
             /* get the note event */
             nNote = 0xFF;
             nSample = 0x00;
@@ -145,15 +149,15 @@ static UINT S3MDecodePattern(UINT nTracks, PUCHAR pData, UINT nSize,
             nParams = 0x00;
             nTrack = nFlags & 0x1F;
             if (nFlags & 0x20) {
-                nNote = *pData++;
-                nSample = *pData++;
+                nNote = *lpData++;
+                nSample = *lpData++;
             }
             if (nFlags & 0x40) {
-                nVolume = *pData++;
+                nVolume = *lpData++;
             }
             if (nFlags & 0x80) {
-                nCommand = *pData++;
-                nParams = *pData++;
+                nCommand = *lpData++;
+                nParams = *lpData++;
             }
 
             /* skip notes for non-PCM tracks */
@@ -452,6 +456,12 @@ static UINT S3MDecodePattern(UINT nTracks, PUCHAR pData, UINT nSize,
                     nParams = 0xFF;
                 break;
 
+            case 'Z':
+                /* set sync mark */
+                /* WARNING: this is not an standard FT2 command! */
+                nCommand = 0x23;
+                break;
+
             default:
                 /* unknown S3M command value */
                 nCommand = nParams = 0x00;
@@ -495,56 +505,58 @@ static UINT S3MDecodePattern(UINT nTracks, PUCHAR pData, UINT nSize,
                 nFlags |= AUDIO_PATTERN_COMMAND;
             if (nParams)
                 nFlags |= AUDIO_PATTERN_PARAMS;
-            *pFTData++ = nFlags;
+            *lpFTData++ = nFlags;
             if (nNote)
-                *pFTData++ = nNote;
+                *lpFTData++ = nNote;
             if (nSample)
-                *pFTData++ = nSample;
+                *lpFTData++ = nSample;
             if (nVolume)
-                *pFTData++ = nVolume;
+                *lpFTData++ = nVolume;
             if (nCommand)
-                *pFTData++ = nCommand;
+                *lpFTData++ = nCommand;
             if (nParams)
-                *pFTData++ = nParams;
+                *lpFTData++ = nParams;
         }
     }
-    pPattern->nSize = (pFTData - pPattern->pData);
-    if ((pPattern->pData = realloc(pPattern->pData,
-                pPattern->nSize)) == NULL) {
+    lpPattern->nSize = (lpFTData - lpPattern->lpData);
+    if ((lpPattern->lpData = realloc(lpPattern->lpData,
+				     lpPattern->nSize)) == NULL) {
         return AUDIO_ERROR_NOMEMORY;
     }
     return AUDIO_ERROR_NONE;
 }
 
-static VOID S3MDecodeSample(PUCHAR pData, UINT nSize)
+static VOID S3MDecodeSample(LPBYTE lpData, UINT nSize)
 {
     /* convert from 8-bit unsigned to 8-bit signed linear */
     while (nSize--) {
-        *pData++ ^= 0x80;
+        *lpData++ ^= 0x80;
     }
 }
 
-UINT AIAPI ALoadModuleS3M(PSZ pszFileName, PAUDIOMODULE *ppModule)
+UINT AIAPI ALoadModuleS3M(LPSTR lpszFileName, 
+			  LPAUDIOMODULE *lplpModule, DWORD dwFileOffset)
 {
     static S3MFILEHEADER Header;
     static S3MSAMPLEHEADER Sample;
     static S3MPATTERNHEADER Pattern;
-    static USHORT aSampleSegPtr[S3M_MAX_SAMPLES];
-    static USHORT aPatternSegPtr[S3M_MAX_PATTERNS];
-    static UCHAR aPanningTable[S3M_MAX_TRACKS];
-    static UCHAR aMappingTable[S3M_MAX_TRACKS];
-    PAUDIOMODULE pModule;
-    PAUDIOPATTERN pPattern;
-    PAUDIOPATCH pPatch;
-    PAUDIOSAMPLE pSample;
+    static WORD aSampleSegPtr[S3M_MAX_SAMPLES];
+    static WORD aPatternSegPtr[S3M_MAX_PATTERNS];
+    static BYTE aPanningTable[S3M_MAX_TRACKS];
+    static BYTE aMappingTable[S3M_MAX_TRACKS];
+    LPAUDIOMODULE lpModule;
+    LPAUDIOPATTERN lpPattern;
+    LPAUDIOPATCH lpPatch;
+    LPAUDIOSAMPLE lpSample;
     LONG dwRelativeNote;
     UINT n, nErrorCode;
 
-    if (AIOOpenFile(pszFileName)) {
+    if (AIOOpenFile(lpszFileName)) {
         return AUDIO_ERROR_FILENOTFOUND;
     }
+    AIOSeekFile(dwFileOffset, SEEK_SET);
 
-    if ((pModule = (PAUDIOMODULE) calloc(1, sizeof(AUDIOMODULE))) == NULL) {
+    if ((lpModule = (LPAUDIOMODULE) calloc(1, sizeof(AUDIOMODULE))) == NULL) {
         AIOCloseFile();
         return AUDIO_ERROR_NOMEMORY;
     }
@@ -574,13 +586,13 @@ UINT AIAPI ALoadModuleS3M(PSZ pszFileName, PAUDIOMODULE *ppModule)
         Header.nSongLength > S3M_MAX_ORDERS ||
         Header.nPatterns > S3M_MAX_PATTERNS ||
         Header.nSamples > S3M_MAX_SAMPLES) {
-        AFreeModuleFile(pModule);
+        AFreeModuleFile(lpModule);
         AIOCloseFile();
         return AUDIO_ERROR_BADFILEFORMAT;
     }
 
     /* load S3M order table and sample/pattern para-pointers */
-    AIOReadFile(pModule->aOrderTable, Header.nSongLength);
+    AIOReadFile(lpModule->aOrderTable, Header.nSongLength);
     for (n = 0; n < Header.nSamples; n++) {
         AIOReadShort(&aSampleSegPtr[n]);
     }
@@ -610,71 +622,71 @@ UINT AIAPI ALoadModuleS3M(PSZ pszFileName, PAUDIOMODULE *ppModule)
     }
 
     /* initialize the module structure */
-    strncpy(pModule->szModuleName, Header.aModuleName,
-        sizeof(pModule->szModuleName) - 1);
-    pModule->wFlags = AUDIO_MODULE_AMIGA | AUDIO_MODULE_PANNING;
-    pModule->nPatterns = Header.nPatterns;
-    pModule->nPatches = Header.nSamples;
-    pModule->nTempo = Header.nTempo;
-    pModule->nBPM = Header.nBPM;
+    strncpy(lpModule->szModuleName, Header.aModuleName,
+	    sizeof(lpModule->szModuleName) - 1);
+    lpModule->wFlags = AUDIO_MODULE_AMIGA | AUDIO_MODULE_PANNING;
+    lpModule->nPatterns = Header.nPatterns;
+    lpModule->nPatches = Header.nSamples;
+    lpModule->nTempo = Header.nTempo;
+    lpModule->nBPM = Header.nBPM;
     for (n = 0; n < Header.nSongLength; n++) {
-        if (pModule->aOrderTable[n] < Header.nPatterns) {
-            pModule->aOrderTable[pModule->nOrders++] =
-                pModule->aOrderTable[n];
+        if (lpModule->aOrderTable[n] < Header.nPatterns) {
+            lpModule->aOrderTable[lpModule->nOrders++] =
+                lpModule->aOrderTable[n];
         }
         else {
-            pModule->aOrderTable[n] = 0x00;
+            lpModule->aOrderTable[n] = 0x00;
         }
     }
-    /* pModule->nRestart = pModule->nOrders; */
+    /* lpModule->nRestart = lpModule->nOrders; */
     for (n = 0; n < S3M_MAX_TRACKS; n++) {
         aMappingTable[n] = 0xFF;
         if ((Header.aChannelTable[n] &= 0x7F) <= 15) {
-            aMappingTable[n] = pModule->nTracks;
-            pModule->aPanningTable[pModule->nTracks++] =
+            aMappingTable[n] = (BYTE) lpModule->nTracks;
+            lpModule->aPanningTable[lpModule->nTracks++] =
                 aPanningTable[n];
         }
     }
-    if ((pModule->aPatternTable = (PAUDIOPATTERN)
-            calloc(pModule->nPatterns, sizeof(AUDIOPATTERN))) == NULL) {
-        AFreeModuleFile(pModule);
+    if ((lpModule->aPatternTable = (LPAUDIOPATTERN)
+	 calloc(lpModule->nPatterns, sizeof(AUDIOPATTERN))) == NULL) {
+        AFreeModuleFile(lpModule);
         AIOCloseFile();
         return AUDIO_ERROR_NOMEMORY;
     }
-    if ((pModule->aPatchTable = (PAUDIOPATCH)
-            calloc(pModule->nPatches, sizeof(AUDIOPATCH))) == NULL) {
-        AFreeModuleFile(pModule);
+    if ((lpModule->aPatchTable = (LPAUDIOPATCH)
+	 calloc(lpModule->nPatches, sizeof(AUDIOPATCH))) == NULL) {
+        AFreeModuleFile(lpModule);
         AIOCloseFile();
         return AUDIO_ERROR_NOMEMORY;
     }
 
     /* load S3M pattern sheets */
-    pPattern = pModule->aPatternTable;
-    for (n = 0; n < pModule->nPatterns; n++, pPattern++) {
-        AIOSeekFile((LONG) aPatternSegPtr[n] << 4, SEEK_SET);
+    lpPattern = lpModule->aPatternTable;
+    for (n = 0; n < lpModule->nPatterns; n++, lpPattern++) {
+        AIOSeekFile(((LONG) aPatternSegPtr[n] << 4) + dwFileOffset, SEEK_SET);
         AIOReadShort(&Pattern.nSize);
         Pattern.nSize -= sizeof(Pattern.nSize);
-        if ((Pattern.pData = malloc(Pattern.nSize)) == NULL) {
-            AFreeModuleFile(pModule);
+        if ((Pattern.lpData = malloc(Pattern.nSize)) == NULL) {
+            AFreeModuleFile(lpModule);
             AIOCloseFile();
             return AUDIO_ERROR_NOMEMORY;
         }
-        AIOReadFile(Pattern.pData, Pattern.nSize);
-        nErrorCode = S3MDecodePattern(pModule->nTracks, Pattern.pData,
-            Pattern.nSize, aMappingTable, pPattern);
-        free(Pattern.pData);
+        AIOReadFile(Pattern.lpData, Pattern.nSize);
+        nErrorCode = S3MDecodePattern(lpModule->nTracks, Pattern.lpData,
+				      Pattern.nSize, aMappingTable, lpPattern);
+        free(Pattern.lpData);
         if (nErrorCode != AUDIO_ERROR_NONE) {
-            AFreeModuleFile(pModule);
+            AFreeModuleFile(lpModule);
             AIOCloseFile();
             return nErrorCode;
         }
     }
 
     /* load S3M sample waveforms */
-    pPatch = pModule->aPatchTable;
-    for (n = 0; n < pModule->nPatches; n++, pPatch++) {
+    lpPatch = lpModule->aPatchTable;
+    for (n = 0; n < lpModule->nPatches; n++, lpPatch++) {
         /* load S3M sample header structure */
-        AIOSeekFile((LONG) aSampleSegPtr[n] << 4, SEEK_SET);
+        AIOSeekFile(((LONG) aSampleSegPtr[n] << 4) + dwFileOffset, SEEK_SET);
         AIOReadChar(&Sample.nType);
         AIOReadFile(&Sample.aFileName, sizeof(Sample.aFileName));
         AIOReadShort(&Sample.wDataSegPtr);
@@ -690,59 +702,59 @@ UINT AIAPI ALoadModuleS3M(PSZ pszFileName, PAUDIOMODULE *ppModule)
         AIOReadFile(Sample.aSampleName, sizeof(Sample.aSampleName));
         AIOReadLong(&Sample.dwSCRS);
         if (Sample.nType == S3M_SCRS_PCM && Sample.dwSCRS != S3M_SCRS_MAGIC) {
-            AFreeModuleFile(pModule);
+            AFreeModuleFile(lpModule);
             AIOCloseFile();
             return AUDIO_ERROR_BADFILEFORMAT;
         }
 
         /* initialize patch structure */
-        strncpy(pPatch->szPatchName, Sample.aSampleName,
-            sizeof(pPatch->szPatchName) - 1);
+        strncpy(lpPatch->szPatchName, Sample.aSampleName,
+		sizeof(lpPatch->szPatchName) - 1);
         if (Sample.nType == S3M_SCRS_PCM && Sample.dwLength != 0) {
-            if ((pSample = (PAUDIOSAMPLE)
-                    calloc(1, sizeof(AUDIOSAMPLE))) == NULL) {
-                AFreeModuleFile(pModule);
+            if ((lpSample = (LPAUDIOSAMPLE)
+		 calloc(1, sizeof(AUDIOSAMPLE))) == NULL) {
+                AFreeModuleFile(lpModule);
                 AIOCloseFile();
                 return AUDIO_ERROR_NOMEMORY;
             }
-            pPatch->nSamples = 1;
-            pPatch->aSampleTable = pSample;
+            lpPatch->nSamples = 1;
+            lpPatch->aSampleTable = lpSample;
 
             /* initialize sample structure */
-            pSample->Wave.wFormat = AUDIO_FORMAT_8BITS;
+            lpSample->Wave.wFormat = AUDIO_FORMAT_8BITS;
             if (Sample.bFlags & S3M_SCRS_LOOPED)
-                pSample->Wave.wFormat |= AUDIO_FORMAT_LOOP;
-            pSample->Wave.dwLength = Sample.dwLength;
-            pSample->Wave.dwLoopStart = Sample.dwLoopStart;
-            pSample->Wave.dwLoopEnd = Sample.dwLoopEnd;
-            pSample->Wave.nSampleRate = Sample.nSampleRate;
-            pSample->nVolume = Sample.nVolume;
-            pSample->nPanning = (AUDIO_MIN_PANNING + AUDIO_MAX_PANNING) / 2;
+                lpSample->Wave.wFormat |= AUDIO_FORMAT_LOOP;
+            lpSample->Wave.dwLength = Sample.dwLength;
+            lpSample->Wave.dwLoopStart = Sample.dwLoopStart;
+            lpSample->Wave.dwLoopEnd = Sample.dwLoopEnd;
+            lpSample->Wave.nSampleRate = (WORD) Sample.nSampleRate;
+            lpSample->nVolume = Sample.nVolume;
+            lpSample->nPanning = (AUDIO_MIN_PANNING + AUDIO_MAX_PANNING) / 2;
 
             /* compute fine tuning for this sample */
             if (Sample.nSampleRate != 0) {
                 dwRelativeNote = S3MGetRelativeNote(Sample.nSampleRate);
-                pSample->nRelativeNote = (dwRelativeNote >> 7);
-                pSample->nFinetune = (dwRelativeNote & 0x7F);
+                lpSample->nRelativeNote = (BYTE) (dwRelativeNote >> 7);
+                lpSample->nFinetune = (dwRelativeNote & 0x7F);
             }
 
             /* allocate sample waveform data */
-            nErrorCode = ACreateAudioData(&pSample->Wave);
+            nErrorCode = ACreateAudioData(&lpSample->Wave);
             if (nErrorCode != AUDIO_ERROR_NONE) {
-                AFreeModuleFile(pModule);
+                AFreeModuleFile(lpModule);
                 AIOCloseFile();
                 return nErrorCode;
             }
 
             /* load sample wavefrom data */
-            AIOSeekFile((LONG) Sample.wDataSegPtr << 4, SEEK_SET);
-            AIOReadFile(pSample->Wave.pData, pSample->Wave.dwLength);
-            S3MDecodeSample(pSample->Wave.pData, pSample->Wave.dwLength);
-            AWriteAudioData(&pSample->Wave, 0, pSample->Wave.dwLength);
+            AIOSeekFile(((LONG) Sample.wDataSegPtr << 4) + dwFileOffset, SEEK_SET);
+            AIOReadFile(lpSample->Wave.lpData, lpSample->Wave.dwLength);
+            S3MDecodeSample(lpSample->Wave.lpData, lpSample->Wave.dwLength);
+            AWriteAudioData(&lpSample->Wave, 0, lpSample->Wave.dwLength);
         }
     }
 
     AIOCloseFile();
-    *ppModule = pModule;
+    *lplpModule = lpModule;
     return AUDIO_ERROR_NONE;
 }

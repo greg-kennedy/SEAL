@@ -29,7 +29,7 @@ begin
   if Info.wFormat and AUDIO_FORMAT_STEREO <> 0 then
     Write('stereo ') else Write('mono ');
   Writeln(Info.nSampleRate,' Hz');
-  if ALoadModuleFile(StrPCopy(szFileName, ParamStr(1)), pModule) <> 0 then
+  if ALoadModuleFile(StrPCopy(szFileName, ParamStr(1)), pModule, 0) <> 0 then
   begin
     Writeln('Cant load module file');
     ACloseAudio;

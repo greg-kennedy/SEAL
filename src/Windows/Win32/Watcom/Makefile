@@ -4,18 +4,18 @@ CC = wcl386
 LD = wlink
 AS = tasm
 AR = wlib -b -n -q
-CFLAGS = -zq -c -w9 -we -5r -s -oxt -D__WINDOWS__ -D__ASM__
+CFLAGS = -zq -c -w9 -5r -s -oxt -DWIN32 -D__WINDOWS__ -D__ASM__
 AFLAGS = -q -t -m -ml -zi
 LFLAGS = -zq -l=nt
 
 #AS = wasm
 #AFLAGS = -zq -w9 -we -5r
 
-OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj &
-	iofile.obj modeng.obj nondrv.obj mixdrv.obj _mixdrv.obj windrv.obj
+OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj mtmfile.obj &
+	iofile.obj modeng.obj nondrv.obj mixdrv.obj _mixdrv.obj windrv.obj dsdrv.obj
 
 DLL = audiow32.dll
-LIB = audw32wc.lib
+LIB = ..\lib\Win32\audw32wc.lib
 
 all : mp.exe $(DLL) clean .SYMBOLIC
 	@echo done.
@@ -24,7 +24,7 @@ mp.exe : mp.obj $(LIB)
 	$(CC) mp.obj $(LIB) $(LFLAGS)
 
 $(LIB) : $(DLL)
-	$(AR) +$(DLL)
+	$(AR) $(LIB) @Windows\Win32\Watcom\audiow32.lbc
 
 $(DLL) : $(OBJS)
 	$(LD) @Windows\Win32\Watcom\audiow32.lnk

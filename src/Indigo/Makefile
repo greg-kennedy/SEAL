@@ -5,12 +5,12 @@ AR = ar
 RANLIB = ranlib
 STRIP = strip
 CFLAGS = -c -Wall -O2 -D__SILICON__ -D__BIGENDIAN__
-LFLAGS = -laudio -L. -lmyaudio
+LFLAGS = -laudio -L../lib/Indigo -laudio
 
-OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o iofile.o \
-	modeng.o nondrv.o mixdrv.o sgidrv.o
+OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o mtmfile.o \
+	iofile.o modeng.o nondrv.o mixdrv.o sgidrv.o
 
-LIB = libmyaudio.a
+LIB = ../lib/Indigo/libaudio.a
 
 all : mp $(LIB) clean
 	@echo done.

@@ -5,12 +5,12 @@ AR = ar
 RANLIB = ranlib
 STRIP = strip
 CFLAGS = -c -Wall -O2 -D__SOLARIS__ -D__BIGENDIAN__
-LFLAGS = -L. -laudio
+LFLAGS = -L../lib/Solaris -laudio
 
-OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o iofile.o \
-	modeng.o nondrv.o mixdrv.o sundrv.o
+OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o mtmfile.o \
+	iofile.o modeng.o nondrv.o mixdrv.o sundrv.o
 
-LIB = libaudio.a
+LIB = ../lib/Solaris/libaudio.a
 
 all : mp $(LIB) clean
 	@echo done.
@@ -27,4 +27,4 @@ $(LIB) : $(OBJS)
 	$(CC) $(CFLAGS) $<
 
 clean :
-	@for f in *.o; do rm -f $$f; done
+	@rm -rf *.o

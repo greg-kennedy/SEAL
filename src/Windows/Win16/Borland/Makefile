@@ -7,10 +7,10 @@ CFLAGS = -ml -W -c -w9 -3 -O2 -D__WINDOWS__ -D__16BIT__
 AFLAGS = -t -m -q -zi
 LFLAGS = -ml -W
 
-OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj \
+OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj mtmfile.obj \
 	iofile.obj modeng.obj nondrv.obj mixdrv.obj windrv.obj
 
-LIB = audw16bc.lib
+LIB = ..\lib\Win16\audw16bc.lib
 
 all : mp.exe $(LIB) clean
 	@echo done.

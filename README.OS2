@@ -1,0 +1,39 @@
+This is the OS/2 port of the Synthetic Audio Library (SEAL).
+
+The DLL included can be used to add OS/2 native support for playing module
+files and streamed audio to OS/2 Presentation Manager (PM) and VIO
+applications. It can also be used to assist in the porting of other DOS,
+Windows, and Linux applications that also use the SEAL API.
+
+To build applications with the SEAL library, simply link them with the
+AUDIO.LIB file and include the AUDIO.H file in your programs. The standard SEAL
+documentation covers the usage of the standard SEAL API. There are a few
+additional considerations in using the OS/2 version:
+
+*  The OS/2 version is multithreaded.  This means that the SEAL library is
+   updating the audio buffers in the background while the rest of your
+   application is running.  Unlike the DOS and Windows versions, you DO NOT
+   HAVE TO call the AUpdateAudio function to update the audio buffers. This
+   also means that some care needs to be taken when updating the voices
+   and sound buffers yourself.  It is recommended that you use DosEnterCritSec
+   and DosExitCritSec around areas where voices are created and destroyed.
+
+*  Some of the SEAL API functions require other threads to be running when
+   they are called.  If you are in a critical section when you call some
+   functions, it can cause deadlock because the critical section prevents
+   other threads in the same task from running.  Do not call the following
+   functions in a critical section: AOpenAudio, ACloseAudio, AUpdateAudio.
+
+*  The AUpdateAudio function was implemented, but not to update the audio.
+   It was made to be a means of synchronizing your application with the audio
+   stream.  When you call AUpdateAudio, the calling thread will block until
+   an audio buffer needs more data.  For a good example of how to use this
+   function and the rest of the SEAL API, ask me for the source code for
+   MAME for OS/2.  E-mail me at mta3206@grace.isc.rit.edu.
+
+
+There are no known OS/2 specific bugs at this time.
+
+Look for a DART-enabled version soon.
+
+- Marty

@@ -1,11 +1,16 @@
 /*
- * $Id: wssdrv.c 1.6 1996/05/24 08:30:44 chasan released $
+ * $Id: wssdrv.c 1.8 1996/09/08 00:25:13 chasan released $
+ *               1.9 1998/10/13 21:45:40 chasan (ENSONIQ AudioPCI fix)
  *
  * Analog Devices AD1848 SoundPort Stereo Codec low level driver.
  * Windows Sound System, Ultrasound Max and Ensoniq Soundscape audio drivers.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -14,6 +19,7 @@
 #include "drivers.h"
 #include "msdos.h"
 
+#define DEBUG(code)
 
 /*----------------- Analog Devices AD1848 Codec routines -----------------*/
 
@@ -178,7 +184,7 @@
 /*
  * Timeout for autocalibrate and DMA buffer length defines
  */
-#define TIMEOUT                 60000   /* number of times to wait for */
+#define TIMEOUT                 100000  /* delay for sync and autocalib. */
 #define BUFFERSIZE              50      /* buffer length in milliseconds */
 #define BUFFRAGSIZE             32      /* buffer fragment size in bytes */
 
@@ -186,12 +192,12 @@
 /*
  * AD1848 supported sampling frequencies table
  */
-static USHORT aFreqFmtTable[] =
+static WORD aFreqFmtTable[] =
 {
-     5512, (0 << 1) | 0x01,     /* CFS=0 XTAL2 */
-     6615, (7 << 1) | 0x01,     /* CFS=7 XTAL2 */
-     8000, (0 << 1) | 0x00,     /* CFS=0 XTAL1 */
-     9600, (7 << 1) | 0x00,     /* CFS=7 XTAL1 */
+    5512, (0 << 1) | 0x01,     /* CFS=0 XTAL2 */
+    6615, (7 << 1) | 0x01,     /* CFS=7 XTAL2 */
+    8000, (0 << 1) | 0x00,     /* CFS=0 XTAL1 */
+    9600, (7 << 1) | 0x00,     /* CFS=7 XTAL1 */
     11025, (1 << 1) | 0x01,     /* CFS=1 XTAL2 */
     16000, (1 << 1) | 0x00,     /* CFS=1 XTAL1 */
     18900, (2 << 1) | 0x01,     /* CFS=2 XTAL2 */
@@ -209,29 +215,29 @@ static USHORT aFreqFmtTable[] =
  * AD1848 configuration structure
  */
 static struct {
-    USHORT  wId;                        /* audio device identifier */
-    USHORT  wFormat;                    /* encoding data format */
-    USHORT  nSampleRate;                /* sampling frequency */
-    USHORT  wBasePort;                  /* audio device base port */
-    USHORT  wPort;                      /* codec base port */
-    UCHAR   nIrqLine;                   /* IRQ interrupt line */
-    UCHAR   nDmaChannel;                /* playback DMA channel */
-    UCHAR   nAdcDmaChannel;             /* capture DMA channel */
-    UCHAR   nClockFormat;               /* clock and data format */
-    PUCHAR  pBuffer;                    /* DMA buffer address */
+    WORD    wId;                        /* audio device identifier */
+    WORD    wFormat;                    /* encoding data format */
+    WORD    nSampleRate;                /* sampling frequency */
+    WORD    wBasePort;                  /* audio device base port */
+    WORD    wPort;                      /* codec base port */
+    BYTE    nIrqLine;                   /* IRQ interrupt line */
+    BYTE    nDmaChannel;                /* playback DMA channel */
+    BYTE    nAdcDmaChannel;             /* capture DMA channel */
+    BYTE    nClockFormat;               /* clock and data format */
+    LPBYTE  lpBuffer;                   /* DMA buffer address */
     UINT    nBufferSize;                /* DMA buffer length */
     UINT    nPosition;                  /* playing DMA position */
-    PFNAUDIOWAVE pfnAudioWave;          /* user callback function */
+    LPFNAUDIOWAVE lpfnAudioWave;        /* user callback function */
 } Codec;
 
 
-static VOID ADPortB(UCHAR nIndex, UCHAR bData)
+static VOID ADPortB(BYTE nIndex, BYTE bData)
 {
     OUTB(Codec.wPort + CODEC_ADDR, nIndex);
     OUTB(Codec.wPort + CODEC_DATA, bData);
 }
 
-static UCHAR ADPortRB(UCHAR nIndex)
+static BYTE ADPortRB(BYTE nIndex)
 {
     OUTB(Codec.wPort + CODEC_ADDR, nIndex);
     return INB(Codec.wPort + CODEC_DATA);
@@ -269,8 +275,10 @@ static BOOL ADWaitACI(VOID)
 
 static UINT ADProbe(VOID)
 {
-    UCHAR nVersion, nLIC, nRIC;
+    BYTE nVersion /**, nLIC, nRIC**/;
 
+    DEBUG(printf("ADProbe: clear interrupts and wait sync\n"));
+    
     /*
      * Clear pending interrupts and wait until synchronization ends
      */
@@ -278,6 +286,8 @@ static UINT ADProbe(VOID)
     OUTB(Codec.wPort + CODEC_STAT, 0x00);
     if (ADWaitSync())
         return AUDIO_ERROR_NODEVICE;
+
+    DEBUG(printf("ADProbe: check AD1848 read-only revision code\n"));
 
     /*
      * Check out AD1848's read-only revision ID code
@@ -287,6 +297,11 @@ static UINT ADProbe(VOID)
     if (ADPortRB(CODEC_MISC) != nVersion)
         return AUDIO_ERROR_NODEVICE;
 
+    /**[1998/10/12]*****************************************
+     * This check does not work with ENSONIQ AudioPCI cards
+     * in Legacy emulation mode. Thanks to Bomb!
+     *******************************************************/
+#if 0
     /*
      * Check out if the left and right input control
      * registers are there.
@@ -303,6 +318,9 @@ static UINT ADProbe(VOID)
     }
     ADPortB(CODEC_LIC, nLIC);
     ADPortB(CODEC_RIC, nRIC);
+#endif
+
+    DEBUG(printf("ADProbe: set interface configuration\n"));
 
     /*
      * Set interface configuration register (enable autocalibration
@@ -310,10 +328,22 @@ static UINT ADProbe(VOID)
      * DMA channel if required)
      */
     ADPortB(CODEC_ADDR_MCE | CODEC_INTF, CODEC_ACAL |
-        (Codec.nDmaChannel != Codec.nAdcDmaChannel ? 0x00 : CODEC_SDC));
+	    (Codec.nDmaChannel != Codec.nAdcDmaChannel ? 0x00 : CODEC_SDC));
     ADPortB(CODEC_INTF, CODEC_ACAL | CODEC_SDC);
+
+    DEBUG(printf("ADProbe: wait autocalibration\n"));
+
+    /**[1998/10/12]*****************************************
+     * This check timeouts with ENSONIQ AudioPCI cards, but
+     * should not be removed for actual AD1848 codecs.
+     */
+#if 0
     if (ADWaitACI())
-        return AUDIO_ERROR_NODEVICE;
+	return AUDIO_ERROR_NODEVICE;
+#else
+    ADWaitACI();
+#endif
+
     return AUDIO_ERROR_NONE;
 }
 
@@ -332,7 +362,7 @@ static VOID ADSetClockFormat(VOID)
      * Determine playback format bit fields and select
      * clock source and frequency divisor values.
      */
-    for (n = 0; n < sizeof(aFreqFmtTable) / sizeof(USHORT) - 2; n += 2) {
+    for (n = 0; n < sizeof(aFreqFmtTable) / sizeof(WORD) - 2; n += 2) {
         if (Codec.nSampleRate <= aFreqFmtTable[n])
             break;
     }
@@ -344,6 +374,8 @@ static VOID ADSetClockFormat(VOID)
     if (Codec.wFormat & AUDIO_FORMAT_STEREO) {
         Codec.nClockFormat |= CODEC_SM;
     }
+
+    DEBUG(printf("ADSetClockFormat: change clock and data format\n"));
 
     /*
      * Set AD1848 clock and data format register and waits
@@ -358,7 +390,9 @@ static VOID ADSetClockFormat(VOID)
 
 static VOID ADStartPlayback(VOID)
 {
-    USHORT nCount;
+    WORD nCount;
+
+    DEBUG(printf("ADStartPlayback: setup DMA channel\n"));
 
     /*
      * First setup the DMA controller parameters for
@@ -376,9 +410,15 @@ static VOID ADStartPlayback(VOID)
     if (Codec.wFormat & AUDIO_FORMAT_STEREO)
         nCount >>= 1;
     nCount--;
-    ADPortB(CODEC_LWR_COUNT, LOBYTE(nCount));
-    ADPortB(CODEC_UPR_COUNT, HIBYTE(nCount));
+
+    DEBUG(printf("ADStartPlayback: set frames and enable playback\n"));
+
+    /* set sample frames per interrupt and enable playback */
+    ADPortB(CODEC_LWR_COUNT, LOBYTE(nCount - 1));
+    ADPortB(CODEC_UPR_COUNT, HIBYTE(nCount - 1));
     ADPortB(CODEC_INTF, ADPortRB(CODEC_INTF) | CODEC_PEN);
+
+    DEBUG(printf("ADStartPlayback: unmute left and right DAC\n"));
 
     ADPortB(CODEC_LDC, ADPortRB(CODEC_LDC) & ~CODEC_LDM);
     ADPortB(CODEC_RDC, ADPortRB(CODEC_RDC) & ~CODEC_RDM);
@@ -386,24 +426,33 @@ static VOID ADStartPlayback(VOID)
 
 static VOID ADStopPlayback(VOID)
 {
+    DEBUG(printf("ADStopPlayback: disable playback\n"));
+
     /*
      * Disable playback using the interface configuration
      * register and then disable the DMA controller channel.
      */
     ADPortB(CODEC_INTF, ADPortRB(CODEC_INTF) & ~CODEC_PEN);
+
+    DEBUG(printf("ADStopPlayback: disable DMA channel\n"));
+
     DosDisableChannel(Codec.nDmaChannel);
 }
 
 
-static UINT ADOpenAudio(PAUDIOINFO pInfo)
+static UINT ADOpenAudio(LPAUDIOINFO lpInfo)
 {
-    ULONG dwBytesPerSecond;
+    DWORD dwBytesPerSecond;
+
+    DEBUG(printf("ADOpenAudio: probe AD1848 codec\n"));
 
     /*
      * Check if we actually have an AD1848 audio codec device
      */
     if (ADProbe())
         return AUDIO_ERROR_NODEVICE;
+
+    DEBUG(printf("ADOpenAudio: allocate DMA buffer area\n"));
 
     /*
      * Allocate and clean DMA channel buffer for playback
@@ -417,17 +466,24 @@ static UINT ADOpenAudio(PAUDIOINFO pInfo)
     Codec.nBufferSize = (Codec.nBufferSize + BUFFRAGSIZE) & -BUFFRAGSIZE;
     if (DosAllocChannel(Codec.nDmaChannel, Codec.nBufferSize))
         return AUDIO_ERROR_NOMEMORY;
-    if ((Codec.pBuffer = DosLockChannel(Codec.nDmaChannel)) != NULL) {
-        memset(Codec.pBuffer, Codec.wFormat & AUDIO_FORMAT_16BITS ?
-            0x00 : 0x80, Codec.nBufferSize);
+    if ((Codec.lpBuffer = DosLockChannel(Codec.nDmaChannel)) != NULL) {
+        memset(Codec.lpBuffer, Codec.wFormat & AUDIO_FORMAT_16BITS ?
+	       0x00 : 0x80, Codec.nBufferSize);
         DosUnlockChannel(Codec.nDmaChannel);
     }
+
+    DEBUG(printf("ADOpenAudio: install interrupt handler\n"));
 
     /*
      * Install AD1848 interrupt handler and enable interrupts
      */
     DosSetVectorHandler(Codec.nIrqLine, ADInterruptHandler);
+
+    DEBUG(printf("ADOpenAudio: enable interrupts\n"));
+
     ADPortB(CODEC_PIN, CODEC_IEN);
+
+    DEBUG(printf("ADOpenAudio: set frequency and start playback\n"));
 
     /*
      * Set frequency and encoding format, and enable playback
@@ -435,50 +491,71 @@ static UINT ADOpenAudio(PAUDIOINFO pInfo)
     ADSetClockFormat();
     ADStartPlayback();
 
-    pInfo->wFormat = Codec.wFormat;
-    pInfo->nSampleRate = Codec.nSampleRate;
+    DEBUG(printf("ADOpenAudio: done\n\n"));
+
+    lpInfo->wFormat = Codec.wFormat;
+    lpInfo->nSampleRate = Codec.nSampleRate;
     return AUDIO_ERROR_NONE;
 }
 
 static UINT ADCloseAudio(VOID)
 {
+    DEBUG(printf("ADCloseAudio: stop playback and DMA channel\n"));
+
     /*
      * Stop DMA playback transfer and releases the DMA channel buffer
      */
     ADStopPlayback();
     DosFreeChannel(Codec.nDmaChannel);
 
+    DEBUG(printf("ADCloseAudio: restore interrupt handler\n"));
+
     /*
      * Restore the interrupt handler and disable/clear pending interrupts
      */
     DosSetVectorHandler(Codec.nIrqLine, NULL);
+
+    DEBUG(printf("ADCloseAudio: disable and clear interrupts\n"));
+
     INB(Codec.wPort + CODEC_STAT);
     OUTB(Codec.wPort + CODEC_STAT, 0x00);
     ADPortB(CODEC_PIN, 0x00);
+
+    DEBUG(printf("ADCloseAudio: done\n\n"));
+
     return AUDIO_ERROR_NONE;
 }
 
-static UINT ADUpdateAudio(VOID)
+static UINT ADUpdateAudio(UINT nFrames)
 {
     int nBlockSize, nSize;
 
-    if ((Codec.pBuffer = DosLockChannel(Codec.nDmaChannel)) != NULL) {
+    if (Codec.wFormat & AUDIO_FORMAT_16BITS) nFrames <<= 1;
+    if (Codec.wFormat & AUDIO_FORMAT_STEREO) nFrames <<= 1;
+    if (nFrames <= 0 || nFrames > Codec.nBufferSize)
+        nFrames = Codec.nBufferSize;
+
+    if ((Codec.lpBuffer = DosLockChannel(Codec.nDmaChannel)) != NULL) {
         nBlockSize = Codec.nBufferSize - Codec.nPosition -
             DosGetChannelCount(Codec.nDmaChannel);
         if (nBlockSize < 0)
             nBlockSize += Codec.nBufferSize;
+
+        if (nBlockSize > nFrames)
+            nBlockSize = nFrames;
+
         nBlockSize &= -BUFFRAGSIZE;
         while (nBlockSize != 0) {
             nSize = Codec.nBufferSize - Codec.nPosition;
             if (nSize > nBlockSize)
                 nSize = nBlockSize;
-            if (Codec.pfnAudioWave != NULL) {
-                Codec.pfnAudioWave(&Codec.pBuffer[Codec.nPosition], nSize);
+            if (Codec.lpfnAudioWave != NULL) {
+                Codec.lpfnAudioWave(&Codec.lpBuffer[Codec.nPosition], nSize);
             }
             else {
-                memset(&Codec.pBuffer[Codec.nPosition],
-                    Codec.wFormat & AUDIO_FORMAT_16BITS ?
-                    0x00 : 0x80, nSize);
+                memset(&Codec.lpBuffer[Codec.nPosition],
+		       Codec.wFormat & AUDIO_FORMAT_16BITS ?
+		       0x00 : 0x80, nSize);
             }
             if ((Codec.nPosition += nSize) >= Codec.nBufferSize)
                 Codec.nPosition -= Codec.nBufferSize;
@@ -489,9 +566,9 @@ static UINT ADUpdateAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT ADSetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+static UINT ADSetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    Codec.pfnAudioWave = pfnAudioWave;
+    Codec.lpfnAudioWave = lpfnAudioWave;
     return AUDIO_ERROR_NONE;
 }
 
@@ -509,16 +586,18 @@ static UINT AIAPI WSSProbe(VOID)
     /*
      * Windows Sound System IRQ and DMA interface latches
      */
-    static UCHAR aIrqTable[16] =
+    static BYTE aIrqTable[16] =
     {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
         0x00, 0x10, 0x18, 0x20, 0x00, 0x00, 0x00, 0x00
     };
-    static UCHAR aDmaTable[8] =
+    static BYTE aDmaTable[8] =
     {
         0x01, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00
     };
-    UCHAR nChipID;
+
+#if 0
+    BYTE nChipID;
 
     /*
      * Check out for a WSS card, then probe the AD1848 audio
@@ -531,14 +610,15 @@ static UINT AIAPI WSSProbe(VOID)
     if ((nChipID & 0x3F) != 0x04 && (nChipID & 0x3F) != 0x00 &&
         (nChipID & 0x3F) != 0x0F)
         return AUDIO_ERROR_NODEVICE;
+#endif
     if (!aIrqTable[Codec.nIrqLine] || !aDmaTable[Codec.nDmaChannel])
         return AUDIO_ERROR_NODEVICE;
     OUTB(Codec.wBasePort + WSS_CODEC_INTF,
-        aIrqTable[Codec.nIrqLine] | aDmaTable[Codec.nDmaChannel]);
+	 aIrqTable[Codec.nIrqLine] | aDmaTable[Codec.nDmaChannel]);
     return ADProbe();
 }
 
-static UINT AIAPI WSSGetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI WSSGetAudioCaps(LPAUDIOCAPS lpCaps)
 {
     static AUDIOCAPS Caps =
     {
@@ -551,15 +631,18 @@ static UINT AIAPI WSSGetAudioCaps(PAUDIOCAPS pCaps)
         AUDIO_FORMAT_4M16 | AUDIO_FORMAT_4S16
     };
 
-    memcpy(pCaps, &Caps, sizeof(AUDIOCAPS));
+    memcpy(lpCaps, &Caps, sizeof(AUDIOCAPS));
     return AUDIO_ERROR_NONE;
 }
 
 static UINT AIAPI WSSPingAudio(VOID)
 {
-    static USHORT aPorts[4] = { 0x530, 0xE80, 0xF40, 0x604 };
+    static WORD aPorts[4] = { 0x530, 0xE80, 0xF40, 0x604 };
+    static BYTE aIrqs[8]  = { 7, 7, 9, 10, 11, 7, 7, 7 };
+    static BYTE aDmas[4]  = { 1, 0, 1, 3 };
+    WORD wIntf;
     UINT n, nChar;
-    PSZ pszCfg;
+    LPSTR lpszCfg;
 
     Codec.wId = AUDIO_PRODUCT_WSS;
     Codec.wBasePort = 0x530;
@@ -567,8 +650,8 @@ static UINT AIAPI WSSPingAudio(VOID)
     Codec.nIrqLine = 7;
     Codec.nDmaChannel = 1;
     Codec.nAdcDmaChannel = 1;
-    if ((pszCfg = DosGetEnvironment("WSSCFG")) != NULL) {
-        nChar = DosParseString(pszCfg, TOKEN_CHAR);
+    if ((lpszCfg = DosGetEnvironment("WSSCFG")) != NULL) {
+        nChar = DosParseString(lpszCfg, TOKEN_CHAR);
         while (nChar != 0) {
             switch (nChar) {
             case 'A':
@@ -591,9 +674,18 @@ static UINT AIAPI WSSPingAudio(VOID)
         return WSSProbe();
     }
     else {
-        for (n = 0; n < sizeof(aPorts) / sizeof(USHORT); n++) {
+        for (n = 0; n < sizeof(aPorts) / sizeof(WORD); n++) {
             Codec.wBasePort = aPorts[n];
             Codec.wPort = Codec.wBasePort + WSS_CODEC_BASE;
+
+            /**[1998/12/02**********************************
+             * Experimental code to autodetect the IRQ and
+             * DMA resource allocated for the WSS card.
+             */ 
+            wIntf = INB(Codec.wBasePort + WSS_CODEC_INTF);
+            Codec.nIrqLine = aIrqs[(wIntf >> 3) & 0x07];
+            Codec.nDmaChannel =
+		Codec.nAdcDmaChannel = aDmas[wIntf & 0x03];
             if (!WSSProbe())
                 return AUDIO_ERROR_NONE;
         }
@@ -601,20 +693,20 @@ static UINT AIAPI WSSPingAudio(VOID)
     }
 }
 
-static UINT AIAPI WSSOpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI WSSOpenAudio(LPAUDIOINFO lpInfo)
 {
     /*
      * Initialize AD1848 configuration structure
      * and setup the IRQ and DMA interface
      */
     memset(&Codec, 0, sizeof(Codec));
-    Codec.wFormat = pInfo->wFormat;
-    Codec.nSampleRate = pInfo->nSampleRate;
+    Codec.wFormat = lpInfo->wFormat;
+    Codec.nSampleRate = lpInfo->nSampleRate;
     if (WSSPingAudio())
         return AUDIO_ERROR_NODEVICE;
 
     /* Initialize common AD1848 codec chip audio driver */
-    return ADOpenAudio(pInfo);
+    return ADOpenAudio(lpInfo);
 }
 
 static UINT AIAPI WSSCloseAudio(VOID)
@@ -624,14 +716,14 @@ static UINT AIAPI WSSCloseAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI WSSUpdateAudio(VOID)
+static UINT AIAPI WSSUpdateAudio(UINT nFrames)
 {
-    return ADUpdateAudio();
+    return ADUpdateAudio(nFrames);
 }
 
-static UINT AIAPI WSSSetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+static UINT AIAPI WSSSetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    return ADSetAudioCallback(pfnAudioWave);
+    return ADSetAudioCallback(lpfnAudioWave);
 }
 
 /*--------------------- Gravis Ultrasound Max driver ---------------------*/
@@ -647,7 +739,7 @@ static UINT AIAPI WSSSetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
 
 static UINT GUSProbe(VOID)
 {
-    UCHAR nRevId, nIntf;
+    BYTE nRevId, nIntf;
 
     /*
      * Check whether we have a GUS MAX board reading
@@ -679,7 +771,7 @@ static UINT GUSProbe(VOID)
     return ADProbe();
 }
 
-static UINT AIAPI GUSGetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI GUSGetAudioCaps(LPAUDIOCAPS lpCaps)
 {
     static AUDIOCAPS Caps =
     {
@@ -702,20 +794,20 @@ static UINT AIAPI GUSGetAudioCaps(PAUDIOCAPS pCaps)
         AUDIO_FORMAT_4M16 | AUDIO_FORMAT_4S16
     };
 
-    memcpy(pCaps, Codec.wId != AUDIO_PRODUCT_GUSDB ?
-        &Caps : &CapsDB, sizeof(AUDIOCAPS));
+    memcpy(lpCaps, Codec.wId != AUDIO_PRODUCT_GUSDB ?
+	   &Caps : &CapsDB, sizeof(AUDIOCAPS));
     return AUDIO_ERROR_NONE;
 }
 
 static UINT AIAPI GUSPingAudio(VOID)
 {
-    PSZ pszUltrasnd, pszUltra16;
+    LPSTR lpszUltrasnd, lpszUltra16;
     UINT wPort, nDramDmaChannel, nAdcDmaChannel, nIrqLine;
     UINT wCodecPort, nCodecDmaChannel, nCodecIrqLine, nCodecType;
 
-    if ((pszUltrasnd = DosGetEnvironment("ULTRASND")) != NULL &&
-        (pszUltra16 = DosGetEnvironment("ULTRA16")) != NULL) {
-        if ((wPort = DosParseString(pszUltrasnd, TOKEN_HEX)) != BAD_TOKEN &&
+    if ((lpszUltrasnd = DosGetEnvironment("ULTRASND")) != NULL &&
+        (lpszUltra16 = DosGetEnvironment("ULTRA16")) != NULL) {
+        if ((wPort = DosParseString(lpszUltrasnd, TOKEN_HEX)) != BAD_TOKEN &&
             (DosParseString(NULL, TOKEN_CHAR) == ',') &&
             (nDramDmaChannel = DosParseString(NULL, TOKEN_DEC)) != BAD_TOKEN &&
             (DosParseString(NULL, TOKEN_CHAR) == ',') &&
@@ -724,7 +816,7 @@ static UINT AIAPI GUSPingAudio(VOID)
             (nIrqLine = DosParseString(NULL, TOKEN_DEC)) != BAD_TOKEN &&
             (DosParseString(NULL, TOKEN_CHAR) == ',') &&
             (/*nMidiIrqLine =*/ DosParseString(NULL, TOKEN_DEC)) != BAD_TOKEN &&
-            (wCodecPort = DosParseString(pszUltra16, TOKEN_HEX)) != BAD_TOKEN &&
+            (wCodecPort = DosParseString(lpszUltra16, TOKEN_HEX)) != BAD_TOKEN &&
             (DosParseString(NULL, TOKEN_CHAR) == ',') &&
             (nCodecDmaChannel = DosParseString(NULL, TOKEN_DEC)) != BAD_TOKEN &&
             (DosParseString(NULL, TOKEN_CHAR) == ',') &&
@@ -756,14 +848,14 @@ static UINT AIAPI GUSPingAudio(VOID)
     return AUDIO_ERROR_NODEVICE;
 }
 
-static UINT AIAPI GUSOpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI GUSOpenAudio(LPAUDIOINFO lpInfo)
 {
     /*
      * Initialize AD1848 configuration structure
      */
     memset(&Codec, 0, sizeof(Codec));
-    Codec.wFormat = pInfo->wFormat;
-    Codec.nSampleRate = pInfo->nSampleRate;
+    Codec.wFormat = lpInfo->wFormat;
+    Codec.nSampleRate = lpInfo->nSampleRate;
     if (GUSPingAudio())
         return AUDIO_ERROR_NODEVICE;
 
@@ -774,12 +866,12 @@ static UINT AIAPI GUSOpenAudio(PAUDIOINFO pInfo)
     OUTB(Codec.wBasePort + GUS_BOARD_MIX_CTRL, 0x09);
 
     /* Initialize common AD1848/CS4231 codec chip audio driver */
-    return ADOpenAudio(pInfo);
+    return ADOpenAudio(lpInfo);
 }
 
 static UINT AIAPI GUSCloseAudio(VOID)
 {
-    UCHAR nIntf;
+    BYTE nIntf;
 
     /* Shutdown common AD1848 codec audio driver */
     ADCloseAudio();
@@ -802,14 +894,14 @@ static UINT AIAPI GUSCloseAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI GUSUpdateAudio(VOID)
+static UINT AIAPI GUSUpdateAudio(UINT nFrames)
 {
-    return ADUpdateAudio();
+    return ADUpdateAudio(nFrames);
 }
 
-static UINT AIAPI GUSSetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+static UINT AIAPI GUSSetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    return ADSetAudioCallback(pfnAudioWave);
+    return ADSetAudioCallback(lpfnAudioWave);
 }
 
 /*---------------------- Ensoniq Soundscape driver ----------------------*/
@@ -843,27 +935,27 @@ static UINT AIAPI GUSSetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
  * Ensoniq Soundscape private structure
  */
 static struct {
-    UCHAR    nChip;
-    UCHAR    nProduct;
-    UCHAR    nDmaB;
-    UCHAR    nIntCfg;
-    UCHAR    nDmaCfg;
-    UCHAR    nCdCfg;
+    BYTE    nChip;
+    BYTE    nProduct;
+    BYTE    nDmaB;
+    BYTE    nIntCfg;
+    BYTE    nDmaCfg;
+    BYTE    nCdCfg;
 } ESS;
 
-static VOID ESSPortB(UCHAR nIndex, UCHAR bData)
+static VOID ESSPortB(BYTE nIndex, BYTE bData)
 {
     OUTB(Codec.wBasePort + ESS_ADDR, nIndex);
     OUTB(Codec.wBasePort + ESS_DATA, bData);
 }
 
-static UCHAR ESSPortRB(UCHAR nIndex)
+static BYTE ESSPortRB(BYTE nIndex)
 {
     OUTB(Codec.wBasePort + ESS_ADDR, nIndex);
     return INB(Codec.wBasePort + ESS_DATA);
 }
 
-static UINT AIAPI ESSGetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI ESSGetAudioCaps(LPAUDIOCAPS lpCaps)
 {
     static AUDIOCAPS Caps =
     {
@@ -876,28 +968,30 @@ static UINT AIAPI ESSGetAudioCaps(PAUDIOCAPS pCaps)
         AUDIO_FORMAT_4M16 | AUDIO_FORMAT_4S16
     };
 
-    memcpy(pCaps, &Caps, sizeof(AUDIOCAPS));
+    memcpy(lpCaps, &Caps, sizeof(AUDIOCAPS));
     return AUDIO_ERROR_NONE;
 }
 
 static UINT AIAPI ESSPingAudio(VOID)
 {
     static CHAR szFileName[80], szLine[80];
-    PSZ pszSndscape, pszName, pszValue;
+    LPSTR lpszSndscape, lpszName, lpszValue;
     UINT nProduct, wPort, wWavePort, nMidiIrqLine, nWaveIrqLine, nDmaChannel;
-    FILE *fp;
+    FILE *fpSndScape;
+
+    DEBUG(printf("ESSPingAudio: read SNDSCAPE.INI hardware profile\n"));
 
     /*
      * Check out if the SNDSCAPE environment variable is present,
      * and read the hardware parameters from the SNDSCAPE.INI file.
      */
-    if ((pszSndscape = DosGetEnvironment("SNDSCAPE")) == NULL)
+    if ((lpszSndscape = DosGetEnvironment("SNDSCAPE")) == NULL)
         return AUDIO_ERROR_NODEVICE;
-    strcpy(szFileName, pszSndscape);
+    strcpy(szFileName, lpszSndscape);
     if (szFileName[strlen(szFileName) - 1] == '\\')
         szFileName[strlen(szFileName) - 1] = 0;
     strcat(szFileName, "\\SNDSCAPE.INI");
-    if ((fp = fopen(szFileName, "r")) == NULL)
+    if ((fpSndScape = fopen(szFileName, "r")) == NULL)
         return AUDIO_ERROR_NODEVICE;
     nProduct = 0;
     wPort = 0xFFFF;
@@ -905,7 +999,7 @@ static UINT AIAPI ESSPingAudio(VOID)
     nMidiIrqLine = 0xFFFF;
     nWaveIrqLine = 0xFFFF;
     nDmaChannel = 0xFFFF;
-    while (fgets(szLine, sizeof(szLine) - 1, fp) != NULL) {
+    while (fgets(szLine, sizeof(szLine) - 1, fpSndScape) != NULL) {
         /*
          * Parse the next line from the SNDSCAPE.INI file
          * which has the following syntax:
@@ -919,34 +1013,37 @@ static UINT AIAPI ESSPingAudio(VOID)
          *      Created 09/08/95 by Andrew P. Weir
          */
         strupr(szLine);
-        pszName = szLine;
-        if ((pszValue = strchr(szLine, '=')) == NULL)
+        lpszName = szLine;
+        if ((lpszValue = strchr(szLine, '=')) == NULL)
             continue;
-        *pszValue++ = 0;
+        *lpszValue++ = 0;
 
-        if (!strcmp(pszName, "PRODUCT")) {
-            if (strstr(pszValue, "SOUNDFX") || strstr(pszValue, "MEDIA_FX"))
+        if (!strcmp(lpszName, "PRODUCT")) {
+            if (strstr(lpszValue, "SOUNDFX") || strstr(lpszValue, "MEDIA_FX"))
                 nProduct = 1;
         }
-        else if (!strcmp(pszName, "PORT")) {
-            wPort = DosParseString(pszValue, TOKEN_HEX);
+        else if (!strcmp(lpszName, "PORT")) {
+            wPort = DosParseString(lpszValue, TOKEN_HEX);
         }
-        else if (!strcmp(pszName, "WAVEPORT")) {
-            wWavePort = DosParseString(pszValue, TOKEN_HEX);
+        else if (!strcmp(lpszName, "WAVEPORT")) {
+            wWavePort = DosParseString(lpszValue, TOKEN_HEX);
         }
-        else if (!strcmp(pszName, "IRQ")) {
-            nMidiIrqLine = DosParseString(pszValue, TOKEN_DEC);
+        else if (!strcmp(lpszName, "IRQ")) {
+            nMidiIrqLine = DosParseString(lpszValue, TOKEN_DEC);
         }
-        else if (!strcmp(pszName, "SBIRQ")) {
-            nWaveIrqLine = DosParseString(pszValue, TOKEN_DEC);
+        else if (!strcmp(lpszName, "SBIRQ")) {
+            nWaveIrqLine = DosParseString(lpszValue, TOKEN_DEC);
         }
-        else if (!strcmp(pszName, "DMA")) {
-            nDmaChannel = DosParseString(pszValue, TOKEN_DEC);
+        else if (!strcmp(lpszName, "DMA")) {
+            nDmaChannel = DosParseString(lpszValue, TOKEN_DEC);
         }
     }
-    fclose(fp);
+    fclose(fpSndScape);
     if ((wPort|wWavePort|nMidiIrqLine|nWaveIrqLine|nDmaChannel) == 0xFFFF)
         return AUDIO_ERROR_NODEVICE;
+
+    DEBUG(printf("ESSPingAudio: Port=0x%03x, WavePort=0x%03x, MidiIrq=%d, WaveIrq=%d, Dma=%d\n",
+		 wPort, wWavePort, nMidiIrqLine, nWaveIrqLine, nDmaChannel));
 
     /*
      * Initialize the AD1848 codec driver variables
@@ -959,6 +1056,8 @@ static UINT AIAPI ESSPingAudio(VOID)
     Codec.nDmaChannel = nDmaChannel;
     Codec.nAdcDmaChannel = nDmaChannel;
 
+    DEBUG(printf("ESSPingAudio: check Ensoniq Soundscape card\n"));
+
     /*
      * Check if there is an Ensoniq Soundscape present
      */
@@ -966,6 +1065,8 @@ static UINT AIAPI ESSPingAudio(VOID)
         return AUDIO_ERROR_NODEVICE;
     if ((INB(Codec.wBasePort + ESS_ADDR) & 0xF0) == 0xF0)
         return AUDIO_ERROR_NODEVICE;
+
+    DEBUG(printf("ESSPingAudio: check Ensoniq GA chip revision\n"));
 
     /*
      * Check Ensoniq Soundscape gate-array chip version
@@ -981,12 +1082,14 @@ static UINT AIAPI ESSPingAudio(VOID)
     else
         ESS.nChip = ESS_CHIP_ODIE;
 
+    DEBUG(printf("ESSPingAudio: probe AD1848 codec\n"));
+
     return ADProbe();
 }
 
-static UINT AIAPI ESSOpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI ESSOpenAudio(LPAUDIOINFO lpInfo)
 {
-    static UCHAR aIrqTable[2][16] =
+    static BYTE aIrqTable[2][16] =
     {
         {
             /* Ensoniq Soundscape IRQ interface latches */
@@ -1000,43 +1103,59 @@ static UINT AIAPI ESSOpenAudio(PAUDIOINFO pInfo)
         }
     };
 
+    DEBUG(printf("ESSOpenAudio: initialize ENSONIQ card\n"));
+
     /*
      * Initialize AD1848 configuration structure
      */
     memset(&Codec, 0, sizeof(Codec));
-    Codec.wFormat = pInfo->wFormat;
-    Codec.nSampleRate = pInfo->nSampleRate;
+    Codec.wFormat = lpInfo->wFormat;
+    Codec.nSampleRate = lpInfo->nSampleRate;
     if (ESSPingAudio())
         return AUDIO_ERROR_NODEVICE;
 
     /* do some resource rerouting if necessary */
     if (ESS.nChip != ESS_CHIP_MMIC) {
+
+        DEBUG(printf("ESSOpenAudio: setup CODEC DMA polarity\n"));
+
         /* setup Codec DMA polarity */
         ESSPortB(ESS_DMACFG, 0x50);
+
+        DEBUG(printf("ESSOpenAudio: lock DMA and IRQ resources\n"));
 
         /* give Codec control of DMA and wave IRQ resources */
         ESS.nCdCfg = ESSPortRB(ESS_CDCFG);
         ESSPortB(ESS_CDCFG, 0x89 | (Codec.nDmaChannel << 4) |
-            (aIrqTable[ESS.nProduct][Codec.nIrqLine] << 1));
+		 (aIrqTable[ESS.nProduct][Codec.nIrqLine] << 1));
+
+        DEBUG(printf("ESSOpenAudio: pull resources from SB emulation\n"));
 
         /* pull off the SB emulation off of those resources */
         ESS.nDmaB = ESSPortRB(ESS_DMAB);
         ESSPortB(ESS_DMAB, 0x20);
         ESS.nIntCfg = ESSPortRB(ESS_INTCFG);
         ESSPortB(ESS_INTCFG, 0xF0 | aIrqTable[ESS.nProduct][Codec.nIrqLine] |
-            (aIrqTable[ESS.nProduct][Codec.nIrqLine] << 2));
+		 (aIrqTable[ESS.nProduct][Codec.nIrqLine] << 2));
     }
 
-    return ADOpenAudio(pInfo);
+    DEBUG(printf("ESSOpenAudio: open AD1848 audio driver\n"));
+
+    return ADOpenAudio(lpInfo);
 }
 
 static UINT AIAPI ESSCloseAudio(VOID)
 {
+    DEBUG(printf("ESSCloseAudio: shutdown AD1848 audio driver\n"));
+
     /* shutdown AD1848 codec playback transfers */
     ADCloseAudio();
 
     /* if neccesary, restore gate array resource registers */
     if (ESS.nChip != ESS_CHIP_MMIC) {
+
+        DEBUG(printf("ESSCloseAudio: restore Ensoniq GA resources\n"));
+
         ESSPortB(ESS_INTCFG, ESS.nIntCfg);
         ESSPortB(ESS_DMAB, ESS.nDmaB);
         ESSPortB(ESS_CDCFG, ESS.nCdCfg);
@@ -1044,16 +1163,15 @@ static UINT AIAPI ESSCloseAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI ESSUpdateAudio(VOID)
+static UINT AIAPI ESSUpdateAudio(UINT nFrames)
 {
-    return ADUpdateAudio();
+    return ADUpdateAudio(nFrames);
 }
 
-static UINT AIAPI ESSSetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+static UINT AIAPI ESSSetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    return ADSetAudioCallback(pfnAudioWave);
+    return ADSetAudioCallback(lpfnAudioWave);
 }
-
 
 
 /*

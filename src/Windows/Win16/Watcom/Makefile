@@ -7,10 +7,10 @@ CFLAGS = -zq -zw -ml -c -w9 -we -5 -s -oxt -D__WINDOWS__ -D__16BIT__
 AFLAGS = -t -m -q -ml -zi
 LFLAGS = -zq -zw -ml
 
-OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj &
+OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj mtmfile.obj &
 	iofile.obj modeng.obj nondrv.obj mixdrv.obj windrv.obj
 
-LIB = audw16wc.lib
+LIB = ..\lib\Win16\audw16wc.lib
 
 all : mp.exe $(LIB) clean .SYMBOLIC
 	@echo done.

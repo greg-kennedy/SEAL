@@ -5,16 +5,16 @@ LD = tlink32
 IMPLIB = implib
 AS = tasm
 AR = tlib
-CFLAGS = -WC -c -w9 -5 -O2 -D__WINDOWS__ -D__ASM__
+CFLAGS = -WC -c -w9 -5 -O2 -DWIN32 -D__WINDOWS__ -D__ASM__
 AFLAGS = -t -m -q -ml -zi
 LFLAGS = -WD
 LDFLAGS = -x -Tpd
-OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj \
+OBJS = audio.obj wavfile.obj xmfile.obj s3mfile.obj modfile.obj mtmfile.obj \
 	iofile.obj modeng.obj nondrv.obj mixdrv.obj _mixdrv.obj windrv.obj \
-	audiow32.obj
+	drdrv.obj audiow32.obj
 
 DLL = audiow32.dll
-LIB = audw32bc.lib
+LIB = ..\lib\Win32\audw32bc.lib
 
 all : mp.exe $(DLL) $(LIB) clean
 

@@ -5,14 +5,16 @@ AR = ar
 RANLIB = ranlib
 STRIP = strip
 COFF2EXE = stubify
-CFLAGS = -c -Wall -O2 -fomit-frame-pointer -D__DPMI__ -D__ASM__
+CFLAGS = -c -Wall -mpentium -O2 -D__DPMI__ -D__ASM__
 LFLAGS =
 
-OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o \
-	iofile.o modeng.o nondrv.o mixdrv.o _mixdrv.o \
-	msdos.o sbdrv.o pasdrv.o wssdrv.o gusdrv.o ariadrv.o
+#OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o mtmfile.o \
+#       iofile.o modeng.o nondrv.o mixdrv.o _mixdrv.o msdos.o \
+#       sbdrv.o awedrv.o pasdrv.o wssdrv.o gusdrv.o ariadrv.o
 
-LIB = audiodjf.a
+OBJS = audiodj.o _mixdrv.o
+
+LIB = ../lib/DOS/libaudio.a
 
 all : mp.exe $(LIB) clean
 	@echo done.
@@ -24,7 +26,7 @@ mp.exe : mp.o $(LIB)
 	@del mp > nul
 
 $(LIB) : $(OBJS)
-	@for %f in ($(OBJS:.o=)) do @$(AR) rc $(LIB) %f.o
+	@$(AR) rc $(LIB) $(OBJS)
 	$(RANLIB) $(LIB)
 
 .c.o :

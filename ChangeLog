@@ -1,0 +1,44 @@
+Release 1.0.7 July 30th, 1999
+  - Source code released under the GNU Lesser General Public License (LGPL)
+
+Release 1.0.6 December 25th, 1998
+  - New API functions ASetAudioMixerValue and AUpdateAudioEx
+  - Minor fixes in ENSONIQ SoundScape and Windows Sound System drivers
+  - Fixed DJGPP memory protection fault due to page swapping
+  - Windows 95 and NT driver thread priority changed
+  - Workaround to get sound on some SB compatible cards
+  - Port to Intel BeOS R4 platforms
+  - New experimental accelerated DirectSound driver
+
+Release 1.0.5 October 18th, 1998
+  - Fixed problems with ENSONIQ AudioPCI cards (Thanks Bomb!)
+  - Port to OS/2 platforms (Thanks Marty!)
+  - Port to Intel BeOS R3 platforms
+  - HTML documentation
+
+Release 1.0.4 April 12th, 1998
+  - Memory leak in AFreeWaveFile() fixed
+  - New API call to retrieve tracks' parameters
+
+Release 1.0.3 January 9th, 1997
+  - Windows Wave and DirectSound drivers bug fixes
+  - Minor bug fix in XM module file loader
+  - Silence driver now actually "play" modules
+
+Release 1.0.1 September 25th, 1996
+  - Support for DirectSound in Windows 95 and NT
+  - Support for Sound Blaster AWE32 (EMU8000) sound cards
+  - Support for Ultrasound PnP (InterWave) sound cards 
+  - Support for MultiTracker 1.0 module files
+  - New synchronization callback feature
+  - New file offset parameter in loading routines
+  - Data type names changed for better portability
+  - Fixed mono playback for non-wavetable sound cards
+  - Volume was too quiet for 8-bit sound cards
+  - Fixed WATCOM C/C++ 10.x naming convention bug
+  - Fixed 4DOS-only batch files to work with COMMAND.COM
+  - Many other minor bug fixes
+
+Release 1.0.0 June 8th, 1996
+  - First release
+

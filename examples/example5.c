@@ -1,23 +1,78 @@
-/* example5.c - play module and waveform file */
+/* example5.c - update the system using the timer interrupt, please compile
+ *              using WATCOM C/C++32 and assume that the stack segment is
+ *              not pegged to the DGROUP segment:
+ *
+ *   wcl386 -l=dos4g -zu -s -I..\include example5.c ..\lib\dos\audiowcf.lib
+ */
+
+#ifndef __WATCOMC__
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("This example only works with WATCOM C/C++32 and DOS4GW\n");
+    return 0;
+}
+
+#else
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <audio.h>
-
-#if defined(_MSC_VER) || defined(__WATCOMC__) || defined(__BORLANDC__) || defined(__DJGPP__)
 #include <conio.h>
-#else
-#define kbhit() 0
-#endif
+#include <dos.h>
+
+/* call the timer handler 70 times per second */
+#define TIMER_RATE  (1193180/70)
+
+volatile void (interrupt far *lpfnBIOSTimerHandler)(void) = NULL;
+volatile long dwTimerAccum = 0L;
+
+void SetBorderColor(BYTE nColor)
+{
+    outp(0x3c0, 0x31);
+    outp(0x3c0, nColor);
+}
+
+void interrupt far TimerHandler(void)
+{
+    SetBorderColor(1);
+    AUpdateAudio();
+    SetBorderColor(0);
+    if ((dwTimerAccum += TIMER_RATE) >= 0x10000L) {
+        dwTimerAccum -= 0x10000L;
+        lpfnBIOSTimerHandler();
+    }
+    else {
+        outp(0x20, 0x20);
+    }
+}
+
+VOID InitTimerHandler(VOID)
+{
+    lpfnBIOSTimerHandler = _dos_getvect(0x08);
+    _dos_setvect(0x08, TimerHandler);
+    outp(0x43, 0x34);
+    outp(0x40, LOBYTE(TIMER_RATE));
+    outp(0x40, HIBYTE(TIMER_RATE));
+}
+
+VOID DoneTimerHandler(VOID)
+{
+    outp(0x43, 0x34);
+    outp(0x40, 0x00);
+    outp(0x40, 0x00);
+    _dos_setvect(0x08, lpfnBIOSTimerHandler);
+}
+
 
 int main(void)
 {
-    AUDIOINFO info;
-    PAUDIOMODULE pModule;
-    PAUDIOWAVE pWave;
-    HAC hVoice;
-    BOOL stopped;
+    static AUDIOINFO info;
+    static AUDIOCAPS caps;
+    static LPAUDIOMODULE lpModule;
 
     /* initialize audio library */
     AInitialize();
@@ -28,50 +83,38 @@ int main(void)
     info.nSampleRate = 44100;
     AOpenAudio(&info);
 
-    /* load module and waveform file */
-    ALoadModuleFile("test.s3m", &pModule);
-    ALoadWaveFile("test.wav", &pWave);
+    /* show device information */
+    AGetAudioDevCaps(info.nDeviceId, &caps);
+    printf("%s detected. Please type EXIT to return.\n", caps.szProductName);
 
-    /* open voices for module and waveform */
-    AOpenVoices(pModule->nTracks + 1);
+    /* load module file */
+    ALoadModuleFile("test.s3m", &lpModule, 0);
+
+    /* open voices for module */
+    AOpenVoices(lpModule->nTracks);
 
     /* play the module file */
-    APlayModule(pModule);
-    ASetModuleVolume(64);
+    APlayModule(lpModule);
 
-    /* play the waveform through a voice */
-    ACreateAudioVoice(&hVoice);
-    APlayVoice(hVoice, pWave);
-    ASetVoiceVolume(hVoice, 48);
-    ASetVoicePanning(hVoice, 128);
+    /* initialize the timer routines */
+    InitTimerHandler();
 
-    /* program main execution loop */
-    while (!kbhit()) {
-        /* update audio system */
-        AUpdateAudio();
+    /* invoke the DOS command processor */
+    system(getenv("COMSPEC"));
 
-        /* restart waveform if stopped */
-        AGetVoiceStatus(hVoice, &stopped);
-        if (stopped) APlayVoice(hVoice, pWave);
-
-        /* check if the module is stopped */
-        AGetModuleStatus(&stopped);
-        if (stopped) break;
-    }
-
-    /* stop playing the waveform */
-    AStopVoice(hVoice);
-    ADestroyAudioVoice(hVoice);
+    /* terminate the timer routines */
+    DoneTimerHandler();
 
     /* stop playing the module */
     AStopModule();
     ACloseVoices();
 
     /* release the waveform & module */
-    AFreeWaveFile(pWave);
-    AFreeModuleFile(pModule);
+    AFreeModuleFile(lpModule);
 
     /* close audio device */
     ACloseAudio();
     return 0;
 }
+
+#endif

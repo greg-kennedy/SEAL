@@ -1,9 +1,14 @@
 /*
- * $Id: sundrv.c 1.4 1996/05/24 08:30:44 chasan released $
+ * $Id: sundrv.c 1.5 1996/08/05 18:51:19 chasan released $
  *
  * SPARCstation SunOS and Solaris audio drivers.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -32,7 +37,7 @@
  * Table for 8 bit unsigned PCM linear to companded u-law conversion
  * (Reference: CCITT Recommendation G.711)
  */
-static UCHAR auLawTable[256] =
+static BYTE auLawTable[256] =
 {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01,
     0x01, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, 0x03,
@@ -82,8 +87,9 @@ static LONG aSampleRate[] =
 static struct {
     int     nHandle;
     int     nEncoding;
-    UCHAR   aBuffer[BUFFERSIZE];
-    PFNAUDIOWAVE pfnAudioWave;
+    BYTE    aBuffer[BUFFERSIZE];
+    LPFNAUDIOWAVE lpfnAudioWave;
+    WORD    wFormat;
 } Audio;
 
 
@@ -103,7 +109,7 @@ static LONG GetSampleRate(LONG nSampleRate)
 /*
  * SPARC audio driver API interface
  */
-static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI GetAudioCaps(LPAUDIOCAPS lpCaps)
 {
     static AUDIOCAPS Caps =
     {
@@ -120,7 +126,7 @@ static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
 #endif
     };
 
-    memcpy(pCaps, &Caps, sizeof(AUDIOCAPS));
+    memcpy(lpCaps, &Caps, sizeof(AUDIOCAPS));
     return AUDIO_ERROR_NONE;
 }
 
@@ -129,7 +135,7 @@ static UINT AIAPI PingAudio(VOID)
     return access("/dev/audio", W_OK) ? AUDIO_ERROR_NODEVICE : AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI OpenAudio(LPAUDIOINFO lpInfo)
 {
     int dbri, type;
     audio_info_t info;
@@ -151,11 +157,11 @@ static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
     /* check whether we know about linear encoding */
 #ifdef __SOLARIS__
     dbri = (ioctl(Audio.nHandle, AUDIO_GETDEV, &dev) == 0 &&
-        strcmp(dev.name, "SUNW,dbri") == 0);
+	    strcmp(dev.name, "SUNW,dbri") == 0);
 #else
 #ifdef AUDIO_GETDEV
     dbri = (ioctl(Audio.nHandle, AUDIO_GETDEV, &type) == 0 &&
-        type != AUDIO_DEV_AMD);
+	    type != AUDIO_DEV_AMD);
 #else
     /*
      * There is no AUDIO_GETDEV under SunOS 4.1.1 so we have to
@@ -170,9 +176,9 @@ static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
     if (dbri) {
         /* configure linear encoding for dbri devices */
         info.play.encoding = AUDIO_ENCODING_LINEAR;
-        info.play.channels = pInfo->wFormat & AUDIO_FORMAT_STEREO ? 2 : 1;
-        info.play.precision = pInfo->wFormat & AUDIO_FORMAT_16BITS ? 16 : 8;
-        info.play.sample_rate = GetSampleRate(pInfo->nSampleRate);
+        info.play.channels = lpInfo->wFormat & AUDIO_FORMAT_STEREO ? 2 : 1;
+        info.play.precision = lpInfo->wFormat & AUDIO_FORMAT_16BITS ? 16 : 8;
+        info.play.sample_rate = GetSampleRate(lpInfo->nSampleRate);
     }
     else {
         /* configure companded u-law encoding for AMD devices */
@@ -190,13 +196,14 @@ static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
     }
 
     /* refresh configuration structure */
-    pInfo->wFormat &= ~(AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO);
-    pInfo->wFormat |= info.play.precision != 16 ?
+    lpInfo->wFormat &= ~(AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO);
+    lpInfo->wFormat |= info.play.precision != 16 ?
         AUDIO_FORMAT_8BITS : AUDIO_FORMAT_16BITS;
-    pInfo->wFormat |= info.play.channels != 2 ?
+    lpInfo->wFormat |= info.play.channels != 2 ?
         AUDIO_FORMAT_MONO : AUDIO_FORMAT_STEREO;
-    pInfo->nSampleRate = info.play.sample_rate;
+    lpInfo->nSampleRate = info.play.sample_rate;
 
+    Audio.wFormat = lpInfo->wFormat;
     return AUDIO_ERROR_NONE;
 }
 
@@ -207,25 +214,30 @@ static UINT AIAPI CloseAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI UpdateAudio(VOID)
+static UINT AIAPI UpdateAudio(UINT nFrames)
 {
     int n;
 
-    if (Audio.pfnAudioWave != NULL) {
-        Audio.pfnAudioWave(Audio.aBuffer, sizeof(Audio.aBuffer));
+    if (Audio.wFormat & AUDIO_FORMAT_16BITS) nFrames <<= 1;
+    if (Audio.wFormat & AUDIO_FORMAT_STEREO) nFrames <<= 1;
+    if (nFrames <= 0 || nFrames > sizeof(Audio.aBuffer))
+        nFrames = sizeof(Audio.aBuffer);
+
+    if (Audio.lpfnAudioWave != NULL) {
+        Audio.lpfnAudioWave(Audio.aBuffer, nFrames);
         if (Audio.nEncoding == AUDIO_ENCODING_ULAW) {
-            for (n = 0; n < sizeof(Audio.aBuffer); n++) {
+            for (n = 0; n < nFrames; n++) {
                 Audio.aBuffer[n] = auLawTable[Audio.aBuffer[n]];
             }
         }
-        write(Audio.nHandle, Audio.aBuffer, sizeof(Audio.aBuffer));
+        write(Audio.nHandle, Audio.aBuffer, nFrames);
     }
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI SetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+static UINT AIAPI SetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    Audio.pfnAudioWave = pfnAudioWave;
+    Audio.lpfnAudioWave = lpfnAudioWave;
     return AUDIO_ERROR_NONE;
 }
 

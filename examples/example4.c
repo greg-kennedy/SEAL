@@ -1,4 +1,4 @@
-/* example4.c - play a waveform file */
+/* example4.c - play module and waveform file */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +14,8 @@
 int main(void)
 {
     AUDIOINFO info;
-    PAUDIOWAVE pWave;
+    LPAUDIOMODULE lpModule;
+    LPAUDIOWAVE lpWave;
     HAC hVoice;
     BOOL stopped;
 
@@ -27,38 +28,49 @@ int main(void)
     info.nSampleRate = 44100;
     AOpenAudio(&info);
 
-    /* load waveform file */
-    ALoadWaveFile("test.wav", &pWave);
+    /* load module and waveform file */
+    ALoadModuleFile("test.s3m", &lpModule, 0);
+    ALoadWaveFile("test.wav", &lpWave, 0);
 
-    /* open and allocate a voice */
-    AOpenVoices(1);
-    ACreateAudioVoice(&hVoice);
+    /* open voices for module and waveform */
+    AOpenVoices(lpModule->nTracks + 1);
+
+    /* play the module file */
+    APlayModule(lpModule);
+    ASetModuleVolume(64);
 
     /* play the waveform through a voice */
-    APlayVoice(hVoice, pWave);
-    ASetVoiceVolume(hVoice, 64);
+    ACreateAudioVoice(&hVoice);
+    APlayVoice(hVoice, lpWave);
+    ASetVoiceVolume(hVoice, 48);
     ASetVoicePanning(hVoice, 128);
 
     /* program main execution loop */
-    printf("Playing waveform.\n");
+    printf("Playing module and waveform, press any key to stop.\n");
     while (!kbhit()) {
         /* update audio system */
         AUpdateAudio();
 
-        /* check if the waveform is stopped */
+        /* restart waveform if stopped */
         AGetVoiceStatus(hVoice, &stopped);
+        if (stopped) APlayVoice(hVoice, lpWave);
+
+        /* check if the module is stopped */
+        AGetModuleStatus(&stopped);
         if (stopped) break;
     }
 
-    /* stop the voice */
+    /* stop playing the waveform */
     AStopVoice(hVoice);
-
-    /* release and close the voice */
     ADestroyAudioVoice(hVoice);
+
+    /* stop playing the module */
+    AStopModule();
     ACloseVoices();
 
-    /* release the waveform file */
-    AFreeWaveFile(pWave);
+    /* release the waveform & module */
+    AFreeWaveFile(lpWave);
+    AFreeModuleFile(lpModule);
 
     /* close audio device */
     ACloseAudio();

@@ -1,10 +1,14 @@
 /*
- * $Id: xmfile.c 1.3 1996/05/24 08:30:44 chasan released $
+ * $Id: xmfile.c 1.6 1996/12/12 16:28:54 chasan Exp $
  *
  * Extended module file loader routines.
  *
- * Copyright (c) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (c) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -34,65 +38,65 @@
 typedef struct {
     CHAR    aIdText[17];
     CHAR    aModuleName[20];
-    CHAR    bPadding;
+    BYTE    bPadding;
     CHAR    aTrackerName[20];
-    USHORT  wVersion;
-    ULONG   dwHeaderSize;
-    USHORT  nSongLength;
-    USHORT  nRestart;
-    USHORT  nTracks;
-    USHORT  nPatterns;
-    USHORT  nPatches;
-    USHORT  wFlags;
-    USHORT  nTempo;
-    USHORT  nBPM;
-    UCHAR   aOrderTable[256];
+    WORD    wVersion;
+    DWORD   dwHeaderSize;
+    WORD    nSongLength;
+    WORD    nRestart;
+    WORD    nTracks;
+    WORD    nPatterns;
+    WORD    nPatches;
+    WORD    wFlags;
+    WORD    nTempo;
+    WORD    nBPM;
+    BYTE    aOrderTable[256];
 } XMFILEHEADER;
 
 typedef struct {
-    ULONG   dwHeaderSize;
-    UCHAR   nPacking;
-    USHORT  nRows;
-    USHORT  nSize;
+    DWORD   dwHeaderSize;
+    BYTE    nPacking;
+    WORD    nRows;
+    WORD    nSize;
 } XMPATTERNHEADER;
 
 typedef struct {
-    ULONG   dwHeaderSize;
+    DWORD   dwHeaderSize;
     CHAR    aPatchName[22];
-    UCHAR   nType;
-    USHORT  nSamples;
-    ULONG   dwSampleHeaderSize;
-    UCHAR   aSampleNumber[96];
-    ULONG   aVolumeEnvelope[12];
-    ULONG   aPanningEnvelope[12];
-    UCHAR   nVolumePoints;
-    UCHAR   nPanningPoints;
-    UCHAR   nVolumeSustain;
-    UCHAR   nVolumeLoopStart;
-    UCHAR   nVolumeLoopEnd;
-    UCHAR   nPanningSustain;
-    UCHAR   nPanningLoopStart;
-    UCHAR   nPanningLoopEnd;
-    UCHAR   bVolumeFlags;
-    UCHAR   bPanningFlags;
-    UCHAR   nVibratoType;
-    UCHAR   nVibratoSweep;
-    UCHAR   nVibratoDepth;
-    UCHAR   nVibratoRate;
-    USHORT  nVolumeFadeout;
-    USHORT  wReserved;
+    BYTE    nType;
+    WORD    nSamples;
+    DWORD   dwSampleHeaderSize;
+    BYTE    aSampleNumber[96];
+    DWORD   aVolumeEnvelope[12];
+    DWORD   aPanningEnvelope[12];
+    BYTE    nVolumePoints;
+    BYTE    nPanningPoints;
+    BYTE    nVolumeSustain;
+    BYTE    nVolumeLoopStart;
+    BYTE    nVolumeLoopEnd;
+    BYTE    nPanningSustain;
+    BYTE    nPanningLoopStart;
+    BYTE    nPanningLoopEnd;
+    BYTE    bVolumeFlags;
+    BYTE    bPanningFlags;
+    BYTE    nVibratoType;
+    BYTE    nVibratoSweep;
+    BYTE    nVibratoDepth;
+    BYTE    nVibratoRate;
+    WORD    nVolumeFadeout;
+    WORD    wReserved;
 } XMPATCHHEADER;
 
 typedef struct {
-    ULONG   dwLength;
-    ULONG   dwLoopStart;
-    ULONG   dwLoopLength;
-    UCHAR   nVolume;
-    UCHAR   nFinetune;
-    UCHAR   bFlags;
-    UCHAR   nPanning;
-    UCHAR   nRelativeNote;
-    UCHAR   bReserved;
+    DWORD   dwLength;
+    DWORD   dwLoopStart;
+    DWORD   dwLoopLength;
+    BYTE    nVolume;
+    BYTE    nFinetune;
+    BYTE    bFlags;
+    BYTE    nPanning;
+    BYTE    nRelativeNote;
+    BYTE    bReserved;
     CHAR    aSampleName[22];
 } XMSAMPLEHEADER;
 
@@ -100,50 +104,52 @@ typedef struct {
 /*
  * Extended module loader routines
  */
-static VOID XMDecodeSamples(PAUDIOWAVE pWave)
+static VOID XMDecodeSamples(LPAUDIOWAVE lpWave)
 {
-    PUSHORT pwCode;
-    PUCHAR pbCode;
+    LPWORD lpwCode;
+    LPBYTE lpbCode;
     UINT nDelta, nCount;
 
     nDelta = 0;
-    nCount = pWave->dwLength;
-    if (pWave->wFormat & AUDIO_FORMAT_16BITS) {
-        pwCode = (PUSHORT) pWave->pData;
+    nCount = lpWave->dwLength;
+    if (lpWave->wFormat & AUDIO_FORMAT_16BITS) {
+        lpwCode = (LPWORD) lpWave->lpData;
         nCount >>= 1;
         while (nCount--) {
 #ifdef __BIGENDIAN__
-            *pwCode = MAKEWORD(HIBYTE(*pwCode), LOBYTE(*pwCode));
+            *lpwCode = MAKEWORD(HIBYTE(*lpwCode), LOBYTE(*lpwCode));
 #endif
-            nDelta = *pwCode++ += nDelta;
+            nDelta = *lpwCode++ += nDelta;
         }
     }
     else {
-        pbCode = (PUCHAR) pWave->pData;
+        lpbCode = (LPBYTE) lpWave->lpData;
         while (nCount--) {
-            nDelta = (UCHAR) (*pbCode++ += (UCHAR) nDelta);
+            nDelta = (BYTE) (*lpbCode++ += (BYTE) nDelta);
         }
     }
 }
 
-UINT AIAPI ALoadModuleXM(PSZ pszFileName, PAUDIOMODULE *ppModule)
+UINT AIAPI ALoadModuleXM(LPSTR lpszFileName, 
+			 LPAUDIOMODULE *lplpModule, DWORD dwFileOffset)
 {
     static XMFILEHEADER Header;
     static XMPATTERNHEADER Pattern;
     static XMPATCHHEADER Patch;
     static XMSAMPLEHEADER Sample;
-    PAUDIOMODULE pModule;
-    PAUDIOPATTERN pPattern;
-    PAUDIOPATCH pPatch;
-    PAUDIOSAMPLE pSample;
+    LPAUDIOMODULE lpModule;
+    LPAUDIOPATTERN lpPattern;
+    LPAUDIOPATCH lpPatch;
+    LPAUDIOSAMPLE lpSample;
     UINT n, m, nErrorCode;
 
     /* open XM module file */
-    if (AIOOpenFile(pszFileName)) {
+    if (AIOOpenFile(lpszFileName)) {
         return AUDIO_ERROR_FILENOTFOUND;
     }
+    AIOSeekFile(dwFileOffset, SEEK_SET);
 
-    if ((pModule = (PAUDIOMODULE) calloc(1, sizeof(AUDIOMODULE))) == NULL) {
+    if ((lpModule = (LPAUDIOMODULE) calloc(1, sizeof(AUDIOMODULE))) == NULL) {
         AIOCloseFile();
         return AUDIO_ERROR_NOMEMORY;
     }
@@ -171,44 +177,45 @@ UINT AIAPI ALoadModuleXM(PSZ pszFileName, PAUDIOMODULE *ppModule)
         Header.nPatterns > AUDIO_MAX_PATTERNS ||
         Header.nPatches > AUDIO_MAX_PATCHES ||
         Header.nTracks > AUDIO_MAX_VOICES) {
-        AFreeModuleFile(pModule);
+        AFreeModuleFile(lpModule);
         AIOCloseFile();
         return AUDIO_ERROR_BADFILEFORMAT;
     }
 
     /* initialize module structure */
-    strncpy(pModule->szModuleName, Header.aModuleName,
-        sizeof(Header.aModuleName));
+    strncpy(lpModule->szModuleName, Header.aModuleName,
+	    sizeof(Header.aModuleName));
     if (Header.wFlags & XM_MODULE_LINEAR)
-        pModule->wFlags |= AUDIO_MODULE_LINEAR;
-    pModule->nOrders = Header.nSongLength;
-    pModule->nRestart = Header.nRestart;
-    pModule->nTracks = Header.nTracks;
-    pModule->nPatterns = Header.nPatterns;
-    pModule->nPatches = Header.nPatches;
-    pModule->nTempo = Header.nTempo;
-    pModule->nBPM = Header.nBPM;
-    for (n = 0; n < pModule->nOrders; n++) {
-        pModule->aOrderTable[n] = Header.aOrderTable[n];
+        lpModule->wFlags |= AUDIO_MODULE_LINEAR;
+    lpModule->nOrders = Header.nSongLength;
+    lpModule->nRestart = Header.nRestart;
+    lpModule->nTracks = Header.nTracks;
+    lpModule->nPatterns = Header.nPatterns;
+    lpModule->nPatches = Header.nPatches;
+    lpModule->nTempo = Header.nTempo;
+    lpModule->nBPM = Header.nBPM;
+    for (n = 0; n < lpModule->nOrders; n++) {
+        lpModule->aOrderTable[n] = Header.aOrderTable[n];
     }
-    for (n = 0; n < pModule->nTracks; n++) {
-        pModule->aPanningTable[n] = (AUDIO_MIN_PANNING + AUDIO_MAX_PANNING)/2;
+    for (n = 0; n < lpModule->nTracks; n++) {
+        lpModule->aPanningTable[n] = (AUDIO_MIN_PANNING + AUDIO_MAX_PANNING)/2;
     }
-    if ((pModule->aPatternTable = (PAUDIOPATTERN)
-            calloc(pModule->nPatterns, sizeof(AUDIOPATTERN))) == NULL) {
-        AFreeModuleFile(pModule);
+
+    if ((lpModule->aPatternTable = (LPAUDIOPATTERN)
+	 calloc(lpModule->nPatterns, sizeof(AUDIOPATTERN))) == NULL) {
+        AFreeModuleFile(lpModule);
         AIOCloseFile();
         return AUDIO_ERROR_NOMEMORY;
     }
-    if ((pModule->aPatchTable = (PAUDIOPATCH)
-            calloc(pModule->nPatches, sizeof(AUDIOPATCH))) == NULL) {
-        AFreeModuleFile(pModule);
+    if ((lpModule->aPatchTable = (LPAUDIOPATCH)
+	 calloc(lpModule->nPatches, sizeof(AUDIOPATCH))) == NULL) {
+        AFreeModuleFile(lpModule);
         AIOCloseFile();
         return AUDIO_ERROR_NOMEMORY;
     }
 
-    pPattern = pModule->aPatternTable;
-    for (n = 0; n < pModule->nPatterns; n++, pPattern++) {
+    lpPattern = lpModule->aPatternTable;
+    for (n = 0; n < lpModule->nPatterns; n++, lpPattern++) {
         /* load XM pattern header structure */
         AIOReadLong(&Pattern.dwHeaderSize);
         AIOReadChar(&Pattern.nPacking);
@@ -216,29 +223,29 @@ UINT AIAPI ALoadModuleXM(PSZ pszFileName, PAUDIOMODULE *ppModule)
         AIOReadShort(&Pattern.nSize);
         AIOSeekFile(Pattern.dwHeaderSize - XM_PATTERN_HEADER_SIZE, SEEK_CUR);
         if (Pattern.nPacking != 0) {
-            AFreeModuleFile(pModule);
+            AFreeModuleFile(lpModule);
             AIOCloseFile();
             return AUDIO_ERROR_BADFILEFORMAT;
         }
 
         /* initialize pattern structure */
-        pPattern->nPacking = Pattern.nPacking;
-        pPattern->nTracks = pModule->nTracks;
-        pPattern->nRows = Pattern.nRows;
-        pPattern->nSize = Pattern.nSize;
-        if (pPattern->nSize != 0) {
+        lpPattern->nPacking = Pattern.nPacking;
+        lpPattern->nTracks = lpModule->nTracks;
+        lpPattern->nRows = Pattern.nRows;
+        lpPattern->nSize = Pattern.nSize;
+        if (lpPattern->nSize != 0) {
             /* allocate and load pattern data */
-            if ((pPattern->pData = malloc(pPattern->nSize)) == NULL) {
-                AFreeModuleFile(pModule);
+            if ((lpPattern->lpData = malloc(lpPattern->nSize)) == NULL) {
+                AFreeModuleFile(lpModule);
                 AIOCloseFile();
                 return AUDIO_ERROR_NOMEMORY;
             }
-            AIOReadFile(pPattern->pData, pPattern->nSize);
+            AIOReadFile(lpPattern->lpData, lpPattern->nSize);
         }
     }
 
-    pPatch = pModule->aPatchTable;
-    for (n = 0; n < pModule->nPatches; n++, pPatch++) {
+    lpPatch = lpModule->aPatchTable;
+    for (n = 0; n < lpModule->nPatches; n++, lpPatch++) {
         /* load XM patch header structure */
         AIOReadLong(&Patch.dwHeaderSize);
         AIOReadFile(Patch.aPatchName, sizeof(Patch.aPatchName));
@@ -272,72 +279,79 @@ UINT AIAPI ALoadModuleXM(PSZ pszFileName, PAUDIOMODULE *ppModule)
             Patch.dwHeaderSize -= XM_PATCH_BODY_SIZE;
         }
         AIOSeekFile(Patch.dwHeaderSize - XM_PATCH_HEADER_SIZE, SEEK_CUR);
+
+        /* HACK: clamp envelope's number of points (12/12/96) */
+	if (Patch.nVolumePoints > AUDIO_MAX_POINTS)
+	    Patch.nVolumePoints = AUDIO_MAX_POINTS;
+        if (Patch.nPanningPoints > AUDIO_MAX_POINTS)
+            Patch.nPanningPoints = AUDIO_MAX_POINTS;
+
         if (Patch.nSamples > AUDIO_MAX_SAMPLES ||
             Patch.nVolumePoints > AUDIO_MAX_POINTS ||
             Patch.nPanningPoints > AUDIO_MAX_POINTS) {
-            AFreeModuleFile(pModule);
+            AFreeModuleFile(lpModule);
             AIOCloseFile();
             return AUDIO_ERROR_BADFILEFORMAT;
         }
 
         /* initialize patch structure */
-        strncpy(pPatch->szPatchName, Patch.aPatchName,
-            sizeof(Patch.aPatchName));
+        strncpy(lpPatch->szPatchName, Patch.aPatchName,
+		sizeof(Patch.aPatchName));
         for (m = 0; m < AUDIO_MAX_NOTES; m++) {
-            pPatch->aSampleNumber[m] = Patch.aSampleNumber[m];
-            if (pPatch->aSampleNumber[m] >= Patch.nSamples)
-                pPatch->aSampleNumber[m] = 0x00;
+            lpPatch->aSampleNumber[m] = Patch.aSampleNumber[m];
+            if (lpPatch->aSampleNumber[m] >= Patch.nSamples)
+                lpPatch->aSampleNumber[m] = 0x00;
         }
-        pPatch->nSamples = Patch.nSamples;
-        pPatch->nVibratoType = Patch.nVibratoType;
-        pPatch->nVibratoSweep = Patch.nVibratoSweep;
-        pPatch->nVibratoDepth = Patch.nVibratoDepth;
-        pPatch->nVibratoRate = Patch.nVibratoRate;
-        pPatch->nVolumeFadeout = Patch.nVolumeFadeout;
-        pPatch->Volume.nPoints = Patch.nVolumePoints;
-        pPatch->Volume.nSustain = Patch.nVolumeSustain;
-        pPatch->Volume.nLoopStart = Patch.nVolumeLoopStart;
-        pPatch->Volume.nLoopEnd = Patch.nVolumeLoopEnd;
+        lpPatch->nSamples = Patch.nSamples;
+        lpPatch->nVibratoType = Patch.nVibratoType;
+        lpPatch->nVibratoSweep = Patch.nVibratoSweep;
+        lpPatch->nVibratoDepth = Patch.nVibratoDepth;
+        lpPatch->nVibratoRate = Patch.nVibratoRate;
+        lpPatch->nVolumeFadeout = Patch.nVolumeFadeout;
+        lpPatch->Volume.nPoints = Patch.nVolumePoints;
+        lpPatch->Volume.nSustain = Patch.nVolumeSustain;
+        lpPatch->Volume.nLoopStart = Patch.nVolumeLoopStart;
+        lpPatch->Volume.nLoopEnd = Patch.nVolumeLoopEnd;
         if (Patch.bVolumeFlags & XM_ENVELOPE_ON)
-            pPatch->Volume.wFlags |= AUDIO_ENVELOPE_ON;
+            lpPatch->Volume.wFlags |= AUDIO_ENVELOPE_ON;
         if (Patch.bVolumeFlags & XM_ENVELOPE_SUSTAIN)
-            pPatch->Volume.wFlags |= AUDIO_ENVELOPE_SUSTAIN;
+            lpPatch->Volume.wFlags |= AUDIO_ENVELOPE_SUSTAIN;
         if (Patch.bVolumeFlags & XM_ENVELOPE_LOOP)
-            pPatch->Volume.wFlags |= AUDIO_ENVELOPE_LOOP;
-        for (m = 0; m < pPatch->Volume.nPoints; m++) {
-            pPatch->Volume.aEnvelope[m].nFrame =
+            lpPatch->Volume.wFlags |= AUDIO_ENVELOPE_LOOP;
+        for (m = 0; m < lpPatch->Volume.nPoints; m++) {
+            lpPatch->Volume.aEnvelope[m].nFrame =
                 LOWORD(Patch.aVolumeEnvelope[m]);
-            pPatch->Volume.aEnvelope[m].nValue =
+            lpPatch->Volume.aEnvelope[m].nValue =
                 HIWORD(Patch.aVolumeEnvelope[m]);
         }
-        pPatch->Panning.nPoints = Patch.nPanningPoints;
-        pPatch->Panning.nSustain = Patch.nPanningSustain;
-        pPatch->Panning.nLoopStart = Patch.nPanningLoopStart;
-        pPatch->Panning.nLoopEnd = Patch.nPanningLoopEnd;
+        lpPatch->Panning.nPoints = Patch.nPanningPoints;
+        lpPatch->Panning.nSustain = Patch.nPanningSustain;
+        lpPatch->Panning.nLoopStart = Patch.nPanningLoopStart;
+        lpPatch->Panning.nLoopEnd = Patch.nPanningLoopEnd;
         if (Patch.bPanningFlags & XM_ENVELOPE_ON)
-            pPatch->Panning.wFlags |= AUDIO_ENVELOPE_ON;
+            lpPatch->Panning.wFlags |= AUDIO_ENVELOPE_ON;
         if (Patch.bPanningFlags & XM_ENVELOPE_SUSTAIN)
-            pPatch->Panning.wFlags |= AUDIO_ENVELOPE_SUSTAIN;
+            lpPatch->Panning.wFlags |= AUDIO_ENVELOPE_SUSTAIN;
         if (Patch.bPanningFlags & XM_ENVELOPE_LOOP)
-            pPatch->Panning.wFlags |= AUDIO_ENVELOPE_LOOP;
-        for (m = 0; m < pPatch->Panning.nPoints; m++) {
-            pPatch->Panning.aEnvelope[m].nFrame =
+            lpPatch->Panning.wFlags |= AUDIO_ENVELOPE_LOOP;
+        for (m = 0; m < lpPatch->Panning.nPoints; m++) {
+            lpPatch->Panning.aEnvelope[m].nFrame =
                 LOWORD(Patch.aPanningEnvelope[m]);
-            pPatch->Panning.aEnvelope[m].nValue =
+            lpPatch->Panning.aEnvelope[m].nValue =
                 HIWORD(Patch.aPanningEnvelope[m]);
         }
-        if (pPatch->nSamples != 0) {
-            if ((pPatch->aSampleTable = (PAUDIOSAMPLE)
-                    calloc(pPatch->nSamples, sizeof(AUDIOSAMPLE))) == NULL) {
-                AFreeModuleFile(pModule);
+        if (lpPatch->nSamples != 0) {
+            if ((lpPatch->aSampleTable = (LPAUDIOSAMPLE)
+		 calloc(lpPatch->nSamples, sizeof(AUDIOSAMPLE))) == NULL) {
+                AFreeModuleFile(lpModule);
                 AIOCloseFile();
                 return AUDIO_ERROR_NOMEMORY;
             }
         }
 
         /* load XM multi-sample header structures */
-        pSample = pPatch->aSampleTable;
-        for (m = 0; m < Patch.nSamples; m++, pSample++) {
+        lpSample = lpPatch->aSampleTable;
+        for (m = 0; m < Patch.nSamples; m++, lpSample++) {
             AIOReadLong(&Sample.dwLength);
             AIOReadLong(&Sample.dwLoopStart);
             AIOReadLong(&Sample.dwLoopLength);
@@ -349,44 +363,44 @@ UINT AIAPI ALoadModuleXM(PSZ pszFileName, PAUDIOMODULE *ppModule)
             AIOReadChar(&Sample.bReserved);
             AIOReadFile(Sample.aSampleName, sizeof(Sample.aSampleName));
             AIOSeekFile(Patch.dwSampleHeaderSize -
-                XM_SAMPLE_HEADER_SIZE, SEEK_CUR);
-            strncpy(pSample->szSampleName, Sample.aSampleName,
-                sizeof(Sample.aSampleName));
-            pSample->Wave.dwLength = Sample.dwLength;
-            pSample->Wave.dwLoopStart = Sample.dwLoopStart;
-            pSample->Wave.dwLoopEnd = Sample.dwLoopStart + Sample.dwLoopLength;
-            pSample->Wave.nSampleRate = 8363;
-            pSample->nVolume = Sample.nVolume;
-            pSample->nPanning = Sample.nPanning;
-            pSample->nRelativeNote = Sample.nRelativeNote;
-            pSample->nFinetune = Sample.nFinetune;
+			XM_SAMPLE_HEADER_SIZE, SEEK_CUR);
+            strncpy(lpSample->szSampleName, Sample.aSampleName,
+		    sizeof(Sample.aSampleName));
+            lpSample->Wave.dwLength = Sample.dwLength;
+            lpSample->Wave.dwLoopStart = Sample.dwLoopStart;
+            lpSample->Wave.dwLoopEnd = Sample.dwLoopStart + Sample.dwLoopLength;
+            lpSample->Wave.nSampleRate = 8363;
+            lpSample->nVolume = Sample.nVolume;
+            lpSample->nPanning = Sample.nPanning;
+            lpSample->nRelativeNote = Sample.nRelativeNote;
+            lpSample->nFinetune = Sample.nFinetune;
             if (Sample.bFlags & XM_SAMPLE_16BITS) {
-                pSample->Wave.wFormat |= AUDIO_FORMAT_16BITS;
+                lpSample->Wave.wFormat |= AUDIO_FORMAT_16BITS;
             }
             if (Sample.bFlags & XM_SAMPLE_LOOP)
-                pSample->Wave.wFormat |= AUDIO_FORMAT_LOOP;
+                lpSample->Wave.wFormat |= AUDIO_FORMAT_LOOP;
             if (Sample.bFlags & XM_SAMPLE_PINGPONG)
-                pSample->Wave.wFormat |= AUDIO_FORMAT_BIDILOOP;
+                lpSample->Wave.wFormat |= AUDIO_FORMAT_BIDILOOP;
         }
 
         /* load XM multi-sample waveform data */
-        pSample = pPatch->aSampleTable;
-        for (m = 0; m < Patch.nSamples; m++, pSample++) {
-            if (pSample->Wave.dwLength == 0)
+        lpSample = lpPatch->aSampleTable;
+        for (m = 0; m < Patch.nSamples; m++, lpSample++) {
+            if (lpSample->Wave.dwLength == 0)
                 continue;
-            nErrorCode = ACreateAudioData(&pSample->Wave);
+            nErrorCode = ACreateAudioData(&lpSample->Wave);
             if (nErrorCode != AUDIO_ERROR_NONE) {
-                AFreeModuleFile(pModule);
+                AFreeModuleFile(lpModule);
                 AIOCloseFile();
                 return nErrorCode;
             }
-            AIOReadFile(pSample->Wave.pData, pSample->Wave.dwLength);
-            XMDecodeSamples(&pSample->Wave);
-            AWriteAudioData(&pSample->Wave, 0, pSample->Wave.dwLength);
+            AIOReadFile(lpSample->Wave.lpData, lpSample->Wave.dwLength);
+            XMDecodeSamples(&lpSample->Wave);
+            AWriteAudioData(&lpSample->Wave, 0, lpSample->Wave.dwLength);
         }
     }
 
     AIOCloseFile();
-    *ppModule = pModule;
+    *lplpModule = lpModule;
     return AUDIO_ERROR_NONE;
 }

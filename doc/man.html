@@ -1,0 +1,1635 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<html>
+
+<head>
+<title>SEAL Synthetic Audio Library 1.07</title>
+<meta name="description" content="SEAL audio library documentation">
+</head>
+
+<body bgcolor="#FFFFFF" fgcolor="#000000">
+
+<h1>SEAL Synthetic Audio Library 1.07</h1>
+<h2>Programmer's Guide</h2>
+
+<hr>
+<h3>Copyright Information</h3>
+
+Information in this document is subject to change without notice. No part of this document may be reproduced or transmitted in any form or by any means, electronic or mechanical, for any purpose, without the express written permission of the author.<p>
+
+  The Synthetic Audio Library Software Developer Kit<br>
+  Copyright (C) 1995-1999 Carlos Hasan<br>
+  <br>
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2 of the License, or (at your option) any later version.<p>
+
+If you have questions, problems or comments about the SEAL audio system you can contact the author at the following Internet email address:<p>
+
+Carlos Hasan<br>
+<a href="mailto:chasan@dcc.uchile.cl">chasan@dcc.uchile.cl</a>
+<hr>
+
+
+<h3>About the Synthetic Audio Library</h3>
+
+The Synthetic Audio Library application programming interface allows your applications to play digital audio waveforms and multichannel music sequences in your applications, provides low-latency mixing, hardware acceleration and dynamic digital filtering for improved sound quality.<p>
+ 
+The SEAL API allows you, as an application developer, access the audio hardware while insulating you from the specific details of that hardware. The design goal of SEAL is speed. Instead of providing a high-level set of functions, it provides a device-independant interface, allowing applications to take full adventage of the capabilities of the audio hardware.<p>
+
+<h3>Supported Platforms and Hardware</h3>
+
+The Synthetic Audio Library SEAL SDK is available for DOS, Extended DOS, Windows 95, Windows NT and Linux operating systems. The following compilers are supported in the current version of the audio system:<p>
+
+<ul>
+  <li> WATCOM C/C++32 10.0 Compiler for DOS4GW and Win32 </li>
+  <li> DJGPP 2.0 Compiler port of GNU CC for DOS/DPMI32 </li>
+  <li> GNU CC 2.7.0 Compiler for Linux (a.out and ELF) operating system </li>
+  <li> Visual C++ 4.1 Compiler for Windows 95 and Windows NT </li>
+  <li> Borland Delphi 2.0 Compiler for Windows 95 and Windows NT </li>
+  <li> Metrowerks CodeWarrior C++ for BeOS Intel Release 3 </li>
+  <li> GNU CC Compiler for BeOS Intel Release 4 </li>
+  <li> EMX port of GNU CC 2.7.x Compiler for OS/2 operating system </li>
+</ul>
+
+Any other language for Windows 95 or Windows NT with 32-bit dynamic link libraries support, such as Visual Basic or Borland C++ 5.0, should also be able to use the audio system AUDIOW32.DLL dynamic link library.<p>
+
+Under the DOS operating system the following hardware audio devices are natively supported by the audio system:<p>
+
+<ul>
+  <li>	Sound Blaster 1.0 </li>
+  <li>	Sound Blaster 1.5 </li>
+  <li>	Sound Blaster 2.0 </li>
+  <li>	Sound Blaster Pro I and II </li>
+  <li>	Sound Blaster 16 / ASP </li>
+  <li>	Sound Blaster 32 </li>
+  <li>	Sound Blaster AWE32 </li>
+  <li>  <b> Creative PCI64 and PCI128 cards </b> </li>
+  <li>	Windows Sound System </li>
+  <li>	Ensoniq Soundscape  </li>
+  <li>	Ensoniq Soundscape Elite </li>
+  <li>  <b> Ensoniq AudioPCI cards </b> </li>
+  <li>	Gravis Ultrasound  </li>
+  <li>	Gravis Ultrasound Daughterboard </li>
+  <li>	Gravis Ultrasound MAX </li>
+  <li>	AMD InterWave-based boards </li>
+  <li>	Pro Audio Spectrum </li>
+  <li>	Pro Audio Spectrum Plus </li>
+  <li>	Pro Audio Spectrum 16 </li>
+  <li>	Aria sound cards </li>
+</ul>
+
+Other sound devices compatible with any of the above sound boards are also supported.<p>
+
+
+<h3>Data Types</h3>
+
+The most fundamental data types used in the audio system are waveforms, modules and voices. The waveform data type represent digital audio data of individual sources of sound, modules represent multichannel music sequences, and voices represent monophonic audio channels used to play waveforms. Each voice can control the sound characteristics of the waveform that is being played through it, such as frequency and volume levels.
+
+<h3>Features</h3>
+
+<ul>
+<li> <b>Mixing</b>
+The most used feature of the audio system is the low-latency mixing of digital audio channels. Your application can create up to 32 voices to play concurrently audio data through your sound device. The audio system mixes all the active voices and writes the result to the audio hardware.</li>
+
+Low-latency mixing allows the user to experience no perceptible delay between the time that the application start playing a waveform through the audio hardware and the time that the speakers reproduct the sound.<p>
+
+<li><b>Hardware Acceleration</b>
+The SEAL audio system automatically takes advantage of accelerated sound hardware, including hardware mixing and hardware local memory. Your application does not need to query the hardware to specifically use hardware acceleration.</li>
+</ul>
+
+<hr>
+
+<h2>Audio Device Interface</h2>
+
+<h3>Initialization</h3>
+
+The audio device interface allows your application to communicate and control the audio hardware on the system. Your application must initialize the audio system to be able to start using it by calling the <a href="#AInitialize">AInitialize</a> routine. It's not required for Windows 95 and Windows NT applications.<p>
+
+<h3>Device Capabilities</h3>
+
+Before initializing the audio device for playback, your application can enumerate and retrieve information of the registered audio device drivers. The device drivers are enumerated starting from zero, and the <a href="#AGetAudioNumDevs">AGetAudioNumDevs</a> routine returns the number of audio device drivers installed on the system. The application can retrieve the capabilities information of any of the installed audio device drivers by calling the routine <a href="#AGetAudioDevCaps">AGetAudioDevCaps</a>.<p>
+
+Your application can also call the routine <a href="#APingAudio">APingAudio</a> to determine what kind of audio hardware is present on the system. If there is more than one device present on the system, the first detected audio device will be used.<p>
+
+<h3>Opening the Audio Device</h3>
+
+After investigating the capabilities of the sound device, your application can open the audio hardware for playback calling <a href="#AOpenAudio">AOpenAudio</a> and specifying what audio device, output format, and sampling frequency should be used. Since the specified audio device might not support the desired parameters, the audio system will use the closest configuration supported by the audio hardware.<p>
+
+While the audio system is active, your application must call the routine <a href="#AUpdateAudio">AUpdateAudio</a> to update and send the output audio buffers to the audio hardware. It's not required for Windows 95 and Windows NT applications.<p>
+
+<h3>Closing the Audio Device</h3>
+
+Applications can release the audio hardware by calling the ACloseAudio<a href="#ACloseAudio"></a> routine. It's very important to release all the allocated waveforms, modules and voice resources before closing the audio system.
+
+<h3>Timer Interrupt Services</h3>
+
+Your application can install a virtual audio timer interrupt callback routine by calling the <a href="#ASetAudioTimerProc">ASetAudioTimerProc</a> routine. The rate or speed at which the virtual audio timer routine is called can be changed by calling the routine <a href="#ASetAudioTimerRate">ASetAudioTimerRate</a>. Since the installed timer callback routine can be called from within a hardware interrupt handler, for applications running under the DOS operating system, your timer routine has the same constrains than hardware interrupt handler routines.<p>
+
+Since the audio system plays music sequences using the virtual audio timer interrupt services, your applications won't be able to play music modules and use the timer services simultaneously. You must use your own timer services if you want to play music in your applications. For applications running in DOS, the hardware timer interrupt vector can be used for such purposes.<p>
+
+
+<h2>Audio Voice Interface</h2>
+
+<h3>Creating Audio Voices</h3>
+
+Your application can allocate audio voices to play digital audio waveforms concurrently. After calling the routine <a href="#AOpenVoices">AOpenVoices</a> to specify the amount of available audio voices, your application can call the <a href="#ACreateAudioVoice">ACreateAudioVoice</a> routine to allocate audio voices.<p>
+
+Every allocated audio voice must be released by calling <a href="#ADestroyAudioVoice">ADestroyAudioVoice</a> whenever your application finishes using it. It's important to stop the audio voices before releasing them.<p>
+
+The <a href="#ACloseVoices">ACloseVoices</a> routine must be called to release all the available audio voices when your application is going to close the audio system. Your application must stop all the voices and module files before calling it.<p>
+
+<h3>Play Management</h3>
+
+Your application can start playing a waveform through a voice by calling the <a href="#APlayVoice">APlayVoice</a> or <a href="#APrimeVoice">APrimeVoice</a> routines. The real-time playback of the audio voices is controlled by calling the <a href="#AStartVoice">AStartVoice</a> and <a href="#AStopVoice">AStopVoice</a> routines. The voice stops automatically when the end of the waveform is reached. However, if looping is specified, the voice repeats until <a href="#AStopVoice">AStopVoice</a> is called.<p>
+
+To retrieve or set the current playing position in the waveform of an audio voice, call the <a href="#AGetVoicePosition">AGetVoicePosition</a> or <a href="#ASetVoicePosition">ASetVoicePosition</a> routines. The playing position of the voices is specified as an offset from the start of the waveform data measured in samples.<p>
+
+<h3>Environment Management</h3>
+
+To retrieve or set the volume at which a waveform is being played by a particular audio voice your application can call the <a href="#AGetVoiceVolume">AGetVoiceVolume</a> and <a href="#ASetVoiceVolume">ASetVoiceVolume</a> routines, respectively.<p>
+
+Similarly, by calling the <a href="#AGetVoiceFrequency">AGetVoiceFrequency</a> and <a href="#ASetVoiceFrequency">ASetVoiceFrequency</a> routines, you can retrieve and set the sampling frequency at which the audio waveform is being resampled and played by a given audio voice.<p>
+
+To retrieve and set the stereo pan position of an audio voice, your application can call the <a href="#AGetVoicePanning">AGetVoicePanning</a> and <a href="#ASetVoicePanning">ASetVoicePanning</a> routines. These routines have no effect when the system is playing in monophonic format.<p>
+
+<h3>Retrieving State Information</h3>
+
+The <a href="#ASetVoiceStatus">AGetVoiceStatus</a> routine can be used by your application to determine the current state of an audio voice. The returned boolean value is true when the voice is stopped. Notice that a voice will never stop playing a looped waveform unless the <a href="#AStopVoice">AStopVoice</a> is called.<p>
+
+
+<h2>Audio Waveform Interface</h2>
+
+<h3>Creating Waveforms</h3>
+
+Your application can load waveform files directly from disk by calling <a href="#ALoadWaveFile">ALoadWaveFile</a>. The routine <a href="#AFreeWaveFile">AFreeWaveFile</a> is called to release the waveform from memory. It's also possible to create and destroy custom waveforms calling the <a href="#ACreateAudioData">ACreateAudioData</a> and <a href="#ADestroyAudioData">ADestroyAudioData</a> routines, respectively. Your application can't release a waveform while it's being played by one or more audio voices.<p>
+
+<h3>Playing Waveforms</h3>
+
+The waveform objects, that represent audio data of individual sound sources such as musical instruments or sound effects, can be played through audio voices calling the <a href="#APlayVoice">APlayVoice</a> or <a href="#APrimeVoice">APrimeVoice</a> routines. See the Audio Voices Interface section for more information.<p>
+
+<h2>Audio Music Module Interface</h2>
+
+<h3>Creating Modules</h3>
+
+Your application can load music module files directly from disk by calling <a href="#ALoadModuleFile">ALoadModuleFile</a>. The routine <a href="#AFreeModuleFile">AFreeModuleFile</a> is used to release modules from system memory. If the module file is being played by the audio system, your application must stop it to be able to release it from memory.<p>
+
+<h3>Play Management</h3>
+
+The <a href="#APlayModule">APlayModule</a> routine is used to select and start playing a music module. The audio system can't play music modules concurrently, but there is no limit in the amount of modules loaded in system memory. The <a href="#AStopModule">AStopModule</a> routine is called to stop playing the current music module, and to be able to select another module for playback or whenever the module is going to be released from memory.
+
+While a music module is being played by the audio system, your application can control the real-time playback of the module by calling the <a href="#APauseModule">APauseModule</a> and <a href="#AResumeModule">AResumeModule</a> routines to pause or resume playing the music sequence.<p>
+
+<h3>Environment Management</h3>
+
+Your application can retrieve or set the current module position by calling the <a href="#AGetModulePosition">AGetModulePosition</a> and <a href="#ASetModulePosition">ASetModulePosition</a> routines. These positions are measured in orders and pattern rows.<p>
+
+Similarly, the <a href="#AGetModuleVolume">AGetModuleVolume</a> and <a href="#ASetModuleVolume">ASetModuleVolume</a> routines can be used by your application to change the global volume at which the audio system is playing the music sequence. These routines can only be called while a music module is active.<p>
+
+<h2>Reference Guide</h2>
+
+<h3>Functions</h3>
+
+
+<! ----------------------------------------------------------------------- !>
+
+<hr><a name="AInitialize"><b>UINT AIAPI Ainitialize(VOID)</b></a><p>
+
+Initializes the Synthetic Audio Library.<p>
+
+Returns zero on success.<p>
+
+This routine must be called to initialize the audio system, after initialization your application can use the audio system API routines. It's not required to initialize the audio system for applications running in Windows 95 or Windows NT.<p>
+
+See also <a href="#AOpenAudio">AOpenAudio</a>, <a href="#ACloseAudio">ACloseAudio</a><p>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetVersion"><b>UINT AIAPI AGetVersion(VOID)</b></a><p>
+
+Retrieves the Synthetic Audio Library version.<p>
+
+Returns the audio system major and minor version numbers.<p>
+
+This routine can be used by your application to get the audio system version number, the major version number is encoded in the most significant byte of the returned value and the minor version number in the least significant byte.<p>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetAudioNumDevs"><b>UINT AIAPI AGetAudioNumDevs(VOID)</b></a><p>
+
+Retrieves number of installed audio device drivers.<p>
+
+Returns the number of device drivers installed on the system.<p>
+
+This routine can be used by your application to enumerate the installed audio device drivers on the system. The <a href="#AGetAudioDevCaps">AGetAudioDevCaps</a> routine can be used to retrieve information from a particular audio device driver.<p>
+
+See also <a href="#AGetAudioDevCaps">AGetAudioDevCaps</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetAudioDevCaps"><b>UINT AIAPI AGetAudioDevCaps(UINT nDeviceId, LPAUDIOCAPS lpCaps)</b></a><p>
+
+Retrieves information about audio device drivers.<p>
+
+Return zero on success.<p>
+
+<ul>
+<li> <b>nDeviceId</b>
+Audio device driver identifier.</li>
+
+<li> <b>lpCaps</b>
+Address of an <a href="#AUDIOCAPS">AUDIOCAPS</a> structure that will hold the capabitilies information of the audio device driver referenced by the nDeviceId device driver identifier.</li>
+</ul>
+
+This routine retrieves the audio capabilities information from an audio device driver identified by the nDevideId parameter. The <a href="#AGetAudioNumDevs">AGetAudioNumDevs</a> returns the number of installed audio devices on the system.<p>
+
+<pre>
+    VOID PrintAudioDevs(VOID)
+    {
+        AUDIOCAPS caps;
+        UINT nDeviceId;
+
+        /* show all the installed device drivers */
+        for (nDeviceId = 0; nDeviceId &lt; AGetAudioNumDevs(); nDeviceId++) {
+            AGetAudioDevCaps(nDeviceId, &caps);
+            printf("nDeviceId=%d wProductId=%d szProductName=%s\n",
+                   nDeviceId, caps.wProductId, caps.szProductName);
+        }
+    }
+</pre></font>
+
+See also <a href="#AGetAudioNumDevs">AGetAudioNumDevs</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetErrorText"><b>UINT AIAPI AGetErrorText(UINT nErrorCode, LPSTR lpText, UINT nSize)</b></a><p>
+
+Return readable text description for a given error return code.<p>
+
+Return zero on success.<p>
+
+<ul>
+<li><b>nErrorCode</b>
+Numeric error return code to be translated.</li>
+
+<li><b>lpText</b>
+Address of the null-terminated text description buffer.</li>
+
+<li><b>nSize</b>
+Number of bytes of the text description buffer.</li>
+</ul>
+
+Most of the routines in the Synthetic Audio Library return numeric error codes which can be translated to a readable text description using this routine. The returned text description is a null-terminated string of ASCII characters.<p>
+
+<pre>
+    VOID InitializeAudio(VOID)
+    {
+        AUDIOINFO info;
+        CHAR szText[128];
+        UINT rc;
+
+        info.nDeviceId = AUDIO_DEVICE_MAPPER;
+        info.wFormat = AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO;
+        info.nSampleRate = 44100;
+        if ((rc = AOpenAudio(&info)) != AUDIO_ERROR_NONE) {
+            AGetErrorText(rc, szText, sizeof(szText) - 1);
+            printf("ERROR: %s\n", szText);
+            exit(1);
+       }
+    }
+</pre>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="APingAudio"><b>UINT AIAPI APingAudio(LPUINT lpnDeviceId)</b></a><p>
+
+Automatically detect the installed audio device.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpnDeviceId</b>
+Address of an unsigned integer that will hold the detect device identifier.</li>
+</ul>
+
+This routine can be used to determine which audio device is present on the system. Alternatively, your application can detect and use an audio device by using the virtual audio device identifer AUDIO_DEVICE_MAPPER to open the audio system with the <a href="#AOpenAudio">AOpenAudio</a> routine.<p>
+
+<pre>
+    VOID DetectAudioDevice(VOID)
+    {
+        AUDIOCAPS caps;
+        UINT nDeviceId;
+
+        if (APingAudio(&nDeviceId) != AUDIO_ERROR_NONE) {
+            printf("no audio device found.\n");
+        }
+        else {
+            AGetAudioDevCaps(nDeviceId, &caps);
+            printf("%s device found.\n", caps.szProductName);
+        }
+    }
+</pre>
+
+See Also <a href="#AOpenAudio">AOpenAudio</a>, <a href="#AGetAudioDevCaps">AGetAudioDevCaps</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AOpenAudio"><b>UINT AIAPI AOpenAudio(LPAUDIOINFO lpInfo)</b></a><p>
+
+Open audio device for playback.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpInfo</b>
+Address of an AUDIOINFO structure that holds the playback configuration.</li>
+</ul>
+
+This routine open a given audio device for playback at the specified format and sampling frequency. Since the hardware device might not support the desired configuration, the audio system will use the closest parameters which are then returned in the <a href="#AUDIOINFO">AUDIOINFO</a> structure.<p>
+
+<pre>
+    VOID InitializeAudio(VOID)
+    {
+        AUDIOINFO info;
+
+        info.nDeviceId = AUDIO_DEVICE_MAPPER;
+        info.wFormat = AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO;
+        info.nSampleRate = 44100;
+        if (AOpenAudio(&info) != AUDIO_ERROR_NONE) {
+            printf("Audio initialization failed.\n");
+            exit(1);
+        }
+        else {
+            printf("Audio device initialized at %d bits %s %u Hz\n",
+                   info.wFormat & AUDIO_FORMAT_16BITS ? 16 : 8,
+                   info.wFormat & AUDIO_FORMAT_STEREO ? 
+                   "stereo": "mono", info.nSampleRate);
+        }
+    }
+</pre>
+
+See Also <a href="#ACloseAudio">ACloseAudio</a>, <a href="#AUpdateAudio">AUpdateAudio</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ACloseAudio"><b>UINT AIAPI ACloseAudio(VOID)</b></a><p>
+
+Close the audio device.<p>
+
+Returns zero on success.<p>
+
+This routine must be called to close the audio device before leaving from your application. Your application must release all the resources allocated before closing the audio system.<p>
+
+See Also <a href="#AOpenAudio">AOpenAudio</a>, <a href="#AUpdateAudio">AUpdateAudio</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AUpdateAudio"><b>UINT AIAPI AUpdateAudio(VOID)</b></a><p>
+
+Updates the audio system output buffers.<p>
+
+Returns zero on success.<p>
+
+This routine must be called periodically by your application to update the audio buffers which are sent to the hardware for playback. If your application fails to call this routine enough times per second, the audio output  will sound like a broken disc. It's not required to call this routine for Windows 95 and Windows NT applications.<p>
+
+See Also <a href="#AOpenAudio">AOpenAudio</a>, <a href="#ACloseAudio">ACloseAudio</a>, <a href="#AUpdateAudioEx">AUpdateAudioEx</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AUpdateAudioEx"><b>UINT AIAPI AUpdateAudioEx(UINT nFrames)</b></a><p>
+
+Updates the audio system output buffers.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>nFrames</b>
+The maximum amount of sample frames to update in the output buffer.
+</ul>
+
+This routine is similar to <a href="AUpdateAudio">AUpdateAudio</a> but lets you have more control on the latency of the audio system. It must be called to update up to <b>nFrames</b> sample frames in the output buffer. For example, every time you call AUpdateAudioEx(nSampleRate/100) the audio system will fill up to 10 ms of sound in the output buffer.<p>
+
+See Also <a href="#AOpenAudio">AOpenAudio</a>, <a href="#ACloseAudio">ACloseAudio</a>, <a href="#AUpdateAudio">AUpdateAudio</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetAudioMixerValue"><b>UINT AIAPI ASetAudioMixerValue(UINT nChannel, UINT nValue)</b></a><p>
+
+Changes the audio mixer settings.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>nChannel</b>
+The mixer channel identifier.
+<li><b>nValue</b>
+The new mixer channel's value (0-256).
+</ul>
+
+This routine changes the mixer level settings of the audio engine. Currently the only channel supported is the AUDIO_MIXER_MASTER_VOLUME channel which sets the overall mixing volume level for all the audio voices.
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetAudioCallback"><b>UINT AIAPI ASetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)</b></a><p>
+
+Install audio wave callback routine. Internal use only.<p>
+
+Returns zero on success.<p>
+
+This routine is used internally by the audio system to install the audio wave callback routine used by the software wavetable synthesizer to fill the hardware DMA audio buffer with samples.<p>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetAudioTimerProc"><b>UINT AIAPI ASetAudioTimerProc(LPFNAUDIOTIMER lpfnAudioTimer)</b></a><p>
+
+Install virtual audio timer callback routine.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpfnAudioTimer</b>
+Address of the timer handler routine.</li>
+</ul>
+
+This routine set the virtual audio timer callback routine. Since the audio system uses this timer to play module files in background, your application should not use this routine while the system is playing a music sequence. The virtual timer callback can be called from a hardware interrupt handler for applications running in DOS.<p>
+
+<pre>
+    volatile UINT nTickCounter = 0;
+
+    VOID AIAPI TimerHandler(VOID)
+    {
+        nTickCounter++;
+    }
+
+    VOID InitTimerHandler(VOID)
+    {
+        /* the handler will be called at 125 BPM (50 times per second) */
+        ASetAudioTimerProc(TimerHandler);
+        ASetAudioTimerRate(125);
+    }
+
+    VOID DoneTimerHandler(VOID)
+    {
+        ASetAudioTimerProc(NULL);
+    }
+</pre>
+
+See Also <a href="#ASetAudioTimerRate">ASetAudioTimerRate</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetAudioTimerRate"><b>UINT AIAPI ASetAudioTimerRate(UINT nTimerRate)</b></a><p>
+
+Changes the virtual audio timer rate.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>nTimerRate</b>
+The timer rate given in beats per minute (32-255).</li>
+</ul>
+
+This routine changes the rate at which the virtual audio timer callback will be called by the audio system. Since the virtual audio timer is used by the system to play music sequences, your application can change the tempo or speed of the music by calling this routine while the module is being played.<p>
+
+See Also <a href="#ASetAudioTimerProc">ASetAudioTimerProc</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AOpenVoices"><b>UINT AIAPI AOpenVoices(UINT nVoices)</b></a><p>
+
+Open audio voices.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>nVoices</b>
+Maximum number of allocatable audio voices (1-32).</li>
+</ul>
+
+This routine is used to open audio voices for playback. The number of opened voices may affect both the performance and sound quality for some audio devices, so your application should allocate the minimum amount of voices. Your application must call the routine <a href="#ACloseVoices">ACloseVoices</a> to close all the audio voices before exiting or when the number of opened voices need to be changed.<p>
+
+See Also <a href="#ACloseVoices">ACloseVoices</a>, <a href="#ACreateAudioVoice">ACreateAudioVoice</a>, <a href="#ADestroyAudioVoice">ADestroyAudioVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ACloseVoices"><b>UINT AIAPI ACloseVoices(VOID)</b></a><p>
+
+Close all the audio voices.<p>
+
+Returns zero on success.<p>
+
+This routine closes all the active audio voices. Before calling this routine, all the allocated voices, including those allocated indirectly by calling the <a href="#APlayModule">APlayModule</a> routine, must be released.<p>
+
+See Also <a href="#AOpenVoices">AOpenVoices</a>, <a href="#ACreateAudioVoice">ACreateAudioVoice</a>, <a href="#ADestroyAudioVoice">ADestroyAudioVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ACreateAudioVoice"><b>UINT AIAPI ACreateAudioVoice(LPHAC lphVoice)</b></a><p>
+
+Allocates a single audio voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lphVoice</b>
+Address of a voice handle that will hold the allocated voice.</li>
+</ul>
+
+This routine allocates an audio voice which can be used by your application to play waveforms through it. The routine will fail if no more voices are availables or if the application has not yet called <a href="#AOpenVoices">AOpenVoices</a> to open audio voices.<p>
+
+<pre>
+    VOID PlayWaveform(LPAUDIOWAVE lpWave)
+    {
+        HAC hVoice;
+        BOOL stopped;
+
+        /* allocate an audio voice or channel */                
+        if (ACreateAudioVoice(&hVoice) == AUDIO_ERROR_NONE) {
+            /* play the waveform through the voice */
+            APlayVoice(hVoice, lpWave);
+            ASetVoiceVolume(hVoice, 64);
+            ASetVoicePanning(hVoice, 128);
+            /* wait until the wave finishes or a key is pressed */
+            while (!kbhit()) {
+                AUpdateAudio();
+                AGetVoiceStatus(hVoice, &stopped);
+                if (stopped) break;
+            }
+            /* stop the voice (if already playing) */
+            AStopVoice(hVoice);
+            /* release the allocated voice */
+            ADestroyAudioVoice(hVoice);
+        }
+    }
+</pre>
+
+See Also <a href="#AOpenVoices">AOpenVoices</a>, <a href="#ACloseVoices">ACloseVoices</a>, <a href="#ADestroyAudioVoice">ADestroyAudioVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ADestroyAudioVoice"><b>UINT AIAPI ADestroyAudioVoice(HAC hVoice)</b></a><p>
+
+Releases an allocated audio voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice which will be released.</li>
+</ul>
+
+This routine releases an audio voice that was previously allocated by calling the  <a href="#ACreateAudioVoice">ACreateAudioVoice</a> routine. Your application should not release voices which are currently being used to play a waveform.<p>
+
+See Also <a href="#ACreateAudioVoice">ACreateAudioVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="APlayVoice"><b>UINT AIAPI APlayVoice(HAC hVoice, LPAUDIOWAVE lpWave)</b></a><p>
+
+Start playing a waveform through a voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice that will play the waveform.</li>
+
+<li><b>lpWave</b>
+Address of the waveform structure to be played.</li>
+</ul>
+
+This routine start playing a waveform through an audio voice at the default sampling frequency. The volume and panning settings of the audio voice are not changed, so your application may need to change these parameters manually.<p>
+
+See Also <a href="#APrimeVoice">APrimeVoice</a>, <a href="#AStartVoice">AStartVoice</a>, <a href="#AStopVoice">AStopVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="APrimeVoice"><b>UINT AIAPI APrimeVoice(HAC hVoice, LPAUDIOWAVE lpWave)</b></a><p>
+
+Prepares a waveform on an audio voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of  the audio voice that will be prepared.</li>
+
+<li><b>lpWave</b>
+Address of the waveform structure that will be played.</li>
+</ul>
+
+This routine is similar to <a href="#APlayVoice">APlayVoice</a> but will only prepare a waveform to be played through a voice. The routine <a href="#AStartVoice">AStartVoice</a> must be called to actually start playing the waveform. The frequency, volume and panning settings of the voice are not changed by this routine.<p>
+
+<pre>
+    VOID PlayChord(HAC aVoices[3], LPAUDIOWAVE lpWave, LONG aFreqs[3])
+    {
+        UINT n;
+
+        /* first prepare the voices to play the waveform */
+        for (n = 0 ; n < 3 ; n++) {
+            APrimeVoice(aVoices[n], lpWave);
+            ASetVoiceFrequency(aVoices[n], aFreqs[n]);
+            ASetVoiceVolume(aVoices[n], 64);
+        }
+        /* now start playing all them simultaneously */
+        for (n = 0 ; n < 3 ; n++) {
+            AStartVoice(aVoices[n]);
+        }
+    }
+</pre>
+
+See Also <a href="#APlayVoice">APlayVoice</a>, <a href="#AStartVoice">AStartVoice</a>, <a href="#AStopVoice">AStopVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AStartVoice"><b>UINT AIAPI AStartVoice(HAC hVoice)</b></a><p>
+
+Start playing an audio voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be started.</li>
+</ul>
+
+This routines starts or continues playing a waveform through an audio voice that was prepared or stopped by the <a href="#APrimeVoice">APrimeVoice</a> or <a href="#AStopVoice">AStopVoice</a> routines.<p>
+
+See Also <a href="#APrimeVoice">APrimeVoice</a>, <a href="#APlayVoice">APlayVoice</a>, <a href="#AStopVoice">AStopVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AStopVoice"><b>UINT AIAPI AStopVoice(HAC hVoice)</b></a><p>
+
+Stop playing an audio voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be stopped.</li>
+</ul>
+
+This routine stop an audio voice. Your application can restart the audio voice by calling the <a href="#AStartVoice">AStartVoice</a> routine, the voice will continue playing the waveform starting at the position where it was previously stopped.<p>
+ 
+See Also <a href="#APrimeVoice">APrimeVoice</a>, <a href="#APlayVoice">APlayVoice</a>, <a href="#AStartVoice">AStartVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetVoicePosition"><b>UINT AIAPI ASetVoicePosition(HAC hVoice, LONG dwPosition)</b></a><p>
+
+Changes the voice playing position.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of an audio voice.</li>
+
+<li><b>dwPosition</b>
+Playing position measured in samples.</li>
+</ul>
+
+This routine changes the playing position of an audio voice. The position will be changed in real-time, so your application can program echo effects using a pair of allocated voices, for example.<p>
+
+<pre>
+    VOID PlayEchoVoices(HAC aVoices[2], LPAUDIOWAVE lpWave, LONG dwDelay)
+    {
+        /* prepare two voices with the same waveform */
+        APrimeVoice(aVoices[0], lpWave);
+        APrimeVoice(aVoices[1], lpWave);
+        ASetVoiceFrequency(aVoices[0], lpWave-&gt;nSampleRate);
+        ASetVoiceFrequency(aVoices[1], lpWave-&gt;nSampleRate);
+
+        /* set voice volumes (the "echo" voice has a lower volume) */
+        ASetVoiceVolume(aVoices[0], 64);
+        ASetVoiceVolume(aVoices[1], 32);
+
+        /* set the delay (measured in samples) for the "echo" voice */
+        ASetVoicePosition(aVoices[1], dwDelay);
+
+        /* start both voices as simultenously as possible */                
+        AStartVoice(aVoices[0]);
+        AStartVoice(aVoices[1]);
+    }
+</pre>
+
+See Also <a href="#AGetVoicePosition">AGetVoicePosition</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetVoiceFrequency"><b>UINT AIAPI ASetVoiceFrequency(HAC hVoice, LONG dwFrequency)</b></a><p>
+
+Changes the voice sampling frequency.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be changed.</li>
+
+<li><b>dwFrequency</b>
+Sampling frequency measured in Hertz (cycles per second).</li>
+</ul>
+
+This routine changes the sampling frequency of an audio voice. Your application can use this routine to do things like pitch slides or simple stereo enhancement effects by changing the frequency of the audio voices in real-time.<p>
+
+<pre>
+    VOID PlayVoiceStereo(HAC aVoices[2], LPAUDIOWAVE lpWave, LONG dwPitchShift)
+    {
+        /* prepare two voices to play a waveform */
+        APrimeVoice(aVoices[0], lpWave);
+        APrimeVoice(aVoices[1], lpWave);
+        ASetVoiceVolume(aVoices[0], 64);
+        ASetVoiceVolume(aVoices[1], 64);
+
+        /* slightly change the pitch of one of the voices */
+        ASetVoiceFrequency(aVoices[0], lpWave-&gt;nSampleRate);
+        ASetVoiceFrequency(aVoices[1], lpWave-&gt;nSampleRate + dwPitchShift);
+
+        /* set the pan position of the voices to left and right */
+        ASetVoicePanning(aVoices[0], 0);
+        ASetVoicePanning(aVoices[1], 255);
+
+        /* start both voices simultaneously */
+        AStartVoice(aVoices[0]);
+        AStartVoice(aVoices[1]);
+    }
+</pre>
+
+See Also <a href="#AGetVoiceFrequency">AGetVoiceFrequency</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetVoiceVolume"><b>UINT AIAPI ASetVoiceVolume(HAC hVoice, UINT nVolume)</b></a><p>
+
+Changes the voice volume level.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be changed.</li>
+
+<li><b>nVolume</b>
+Linear volume level (0-64).</li>
+</ul>
+
+This routine changes the volume level of an audio voice. The voices can be faded in and out smoothly in real-time using this routine and the virtual audio timer services, for example.<p>
+
+See Also <a href="#AGetVoiceVolume">AGetVoiceVolume</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetVoicePanning"><b>UINT AIAPI ASetVoicePanning(HAC hVoice, UINT nPanning)</b></a><p>
+
+Changes the voice stereo pan position.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be changed.</li>
+
+<li><b>nPanning</b>
+Stereo pan position value (0-255).</li>
+</ul>
+
+This routine changes the stereo pan position of an audio voice. It has no effect when the audio system is playing in monophonic mode.<p>
+
+See Also <a href="#AGetVoicePanning">AGetVoicePanning</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetVoicePosition"><b>UINT AIAPI AGetVoicePosition(HAC hVoice, LPLONG lpdwPosition)</b></a><p>
+
+Retrieves the playing position of a voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be queried.</li>
+
+<li><b>lpdwPosition</b>
+Address of a long variable which will hold the playing position.</li>
+</ul>
+
+This routine retrieves the current playing position of an audio voice measured in samples. Your application can use this routine to implement a double buffering algorithm to play streams of audio data from disk using a single audio voice.</p>
+
+See Also <a href="#ASetVoicePosition">ASetVoicePosition</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetVoiceFrequency"><b>UINT AIAPI AGetVoiceFrequency(HAC hVoice, LPLONG lpdwFrequency)</b></a><p>
+
+Retrieves the sampling frequency of a voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be queried.</li>
+
+<li><b>lpdwFrequency</b>
+Address of a long variable that will hold the frequency.</li>
+</ul>
+
+This routine retrieves the current sampling frequency of an audio voice. Your application should not expect to get back the same frequency used in the last call to the <a href="#ASetVoiceFrequency">ASetVoiceFrequency</a> routine, due to possible rounding errors that occur when the audio system translates frequencies in Hertz to the device dependant format used by the hardware audio device.<p>
+
+See Also <a href="#ASetVoiceFrequency">ASetVoiceFrequency</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetVoiceVolume"><b>UINT AIAPI AGetVoiceVolume(HAC hVoice, LPUINT lpnVolume)</b></a><p>
+
+Retrieves the volume level of a voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice to be queried.</li>
+
+<li><b>lpnVolume</b>
+Address of an unsigned integer variable that will hold the volume.</li>
+</ul>
+
+This routine retrieves the current volume level of an audio voice. Your application should not expect to get back the same volume level used in the last call to the <a href="#ASetVoiceVolume">ASetVoiceVolume</a> routine, due to possible rounding errors that occur when the audio system translates linear volumes to the device dependant format used by the hardware audio device.<p>
+
+See Also <a href="#ASetVoiceVolume">ASetVoiceVolume</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetVoicePanning"><b>UINT AIAPI AGetVoicePanning(HAC hVoice, LPUINT lpnPanning)</b></a><p>
+
+Retrieves the stereo pan position of a voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice which will be queried.</li>
+
+<li><b>lpnPanning</b>
+Address of an unsigned integer variable that will hold the pan position.</li>
+</ul>
+
+This routine retrieves the current stereo pan position of an audio voice. Your application should not expect to get back the same pan position used in the last call to the <a href="#ASetVoicePanning">ASetVoicePanning</a> routine, due to possible rounding errors that occur when the audio system translates pan positions to the device dependant format used by the hardware audio device.<p>
+
+See Also <a href="#ASetVoicePanning">ASetVoicePanning</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetVoiceStatus"><b>UINT AIAPI AGetVoiceStatus(HAC hVoice, LPBOOL lpbStatus)</b></a><p>
+
+Retrieves the current status of a voice.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>hVoice</b>
+Handle of the audio voice that will be queried.</li>
+
+<li><b>lpbStatus</b>
+Address of a boolean variable that will hold the voice status.</li>
+</ul>
+
+This routine retrieves the current status of an audio voice. Your application can use this routine to determine if a voice is stopped or if it's playing a waveform.<p>
+
+<pre>
+    VOID CheckVoice(HAC hVoice)
+    {
+        BOOL stopped;
+        AGetVoiceStatus(hVoice, &stopped);
+        if (stopped)
+            printf("voice is stopped.\n");
+    }
+</pre>
+
+See Also <a href="#AStartVoice">AStartVoice</a>, <a href="#AStopVoice">AStopVoice</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetAudioDataAvail"><b>LONG AIAPI AGetAudioDataAvail(VOID)</b></a><p>
+
+Retrieves the amount of available DRAM memory.<p>
+
+Returns amount of available DRAM memory (in bytes).<p>
+
+This routine retrieves the number of free bytes on the hardware audio device when applicable. It can be used to determine if there is enough space to hold a set of samples or waveforms simultaneously. It returns zero when the audio system is using system memory to hold the audio waveforms data.<p>
+
+<pre>
+    VOID ShowFreeMemory(VOID)
+    {
+        LONG dwMemFree;
+        dwMemFree = AGetAudioDataAvail();
+        printf("%ld bytes free.\n", dwMemFree);
+    }
+</pre>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ACreateAudioData"><b>UINT AIAPI ACreateAudioData(LPAUDIOWAVE lpWave)</b></a><p>
+
+Creates a waveform object.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpWave</b>
+Address of the waveform structure.</li>
+</ul>
+
+This routine is used to create custom waveform objects. Your application can also use <a href="#ALoadWaveFile">ALoadWaveFile</a> to load RIFF/WAVE waveform files from disk. The current version of the audio system only support 8 and 16 bit mono one-shot or looped waveforms (reverse and bidirectional looping modes are not supported by AWE32 audio devices).<p>
+
+<pre>
+    LPAUDIOWAVE CreateAudio8BitMono(WORD nSampleRate,
+                                    LPBYTE lpData, DWORD dwLength)
+    {
+        LPAUDIOWAVE lpWave;
+        /* first allocate structure to hold the waveform object */
+        if ((lpWave = (LPAUDIOWAVE) malloc(sizeof(AUDIOWAVE))) != NULL) {
+            /* create a 8-bit mono one-shot waveform object */
+            lpWave-&gt;wFormat = AUDIO_FORMAT_8BITS | AUDIO_FORMAT_MONO;
+            lpWave-&gt;nSampleRate = nSampleRate;
+            lpWave-&gt;dwLength = dwLength;
+            lpWave-&gt;dwLoopStart = lpWave-&gt;dwLoopEnd = 0;
+            if (ACreateAudioData(lpWave) != AUDIO_ERROR_NONE) {
+                free(lpWave);
+                return NULL;
+            }
+            /* copy the data into the waveform object */
+            memcpy(lpWave-&gt;lpData, lpData, dwLength);
+            /* upload the data to the audio DRAM local memory */
+            AWriteAudioData(lpWave, 0L, dwLength);
+        }
+        return lpWave;
+    }
+</pre>
+
+The waveform structure fields dwLength, dwLoopStart and dwLoopEnd are all measured in bytes, not samples, so your application should be careful to handle 16 bit waveform objects.<p>
+
+See Also <a href="#ADestroyAudioData">ADestroyAudioData</a>, <a href="#AWriteAudioData">AWriteAudioData</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ADestroyAudioData"><b>UINT AIAPI ADestroyAudioData(LPAUDIOWAVE lpWave)</b></a><p>
+
+Releases a waveform object.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpWave</b>
+Address of the waveform object to be released.</li>
+</ul>
+
+This routine releases a waveform object previously allocated by calling the <a href="#ACreateAudioData">ACreateAudioData</a> routine. Before releasing any waveform, your application must be sure that no voices are currently playing the waveform.<p>
+
+See Also <a href="#ACreateAudioData">ACreateAudioData</a>, <a href="#AWriteAudioData">AWriteAudioData</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AWriteAudioData"><b>UINT AIAPI AWriteAudioData(LPAUDIOWAVE lpWave, DWORD dwOffset, UINT nCount)</b></a><p>
+
+Upload waveform audio data to DRAM local memory.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpWave</b>
+Address of the waveform object.</li>
+
+<li><b>dwOffset</b>
+Starting offset of the block of samples to be uploaded.</li>
+
+<li><b>nCount</b>
+Number of bytes in the block of samples to be transferred.</li>
+</ul>
+
+This routine uploads a block of samples from system memory to the hardware DRAM local memory when applicable. Your application must call this routine everytime it writes to the waveform audio data. The chunk of samples to be uploaded is specified by the offset and count parameters measured in bytes.<p>
+
+<pre>
+    VOID StreamData8BitMono(FILE *stream, HAC hVoice, LPAUDIOWAVE lpWave)
+    {
+        BYTE aBuffer[1024];
+        LPBYTE lpChunk;
+        UINT nLength, nChunkSize;
+        DWORD dwOffset, dwVoicePosition;
+
+        /* check if the waveform is large enough for double buffering */
+        if (2*sizeof(aBuffer) &gt; lpWave-&gt;dwLength) {
+            printf("the waveform is too small\n");
+            return;
+        }
+
+        /* first clean up the audio waveform buffer */
+        memset(lpWave-&gt;lpData, 0x80, lpWave-&gt;dwLength);
+        AWriteAudioData(lpWave, 0L, lpWave-&gt;dwLength);
+
+        /* start playing the waveform with forward looping enabled */
+        lpWave-&gt;wFormat |= AUDIO_FORMAT_LOOP;
+        lpWave-&gt;dwLoopStart = 0L;
+        lpWave-&gt;dwLoopEnd = lpWave-&gt;dwLength;
+        APlayVoice(hVoice, lpWave);
+        ASetVoiceVolume(hVoice, 64);
+
+        /* play the whole 8-bit mono stream of audio through the voice */
+        dwOffset = 0;
+        while ((nLength = fread(aBuffer, 1, nLength, stream)) != 0) {
+            /* write the waveform audio data in chunks */
+            lpChunk = aBuffer;
+            while (nLength &gt; 0) {
+                /* determine size of chunk of data */
+                nChunkSize = nLength;
+                if (dwOffset + nChunkSize &gt;= lpWave-&gt;dwLength)
+                    nChunkSize = lpWave-&gt;dwLength - dwOffset;
+
+                /* wait until we can write the chunk of data */
+                for (;;) {
+                    AUpdateAudio();
+                    AGetVoicePosition(hVoice, &dwVoicePosition);
+                    if (dwOffset + nChunkSize &gt; lpWave-&gt;dwLength) {
+                        if (dwVoicePosition &lt; dwOffset &&
+                            dwVoicePosition &gt; dwOffset +
+                            nChunkSize - lpWave-&gt;dwLength)
+                            break;
+                    }
+                    else {
+                        if (dwVoicePosition &lt; dwOffset ||
+                            dwVoicePosition &gt; dwOffset + nChunkSize)
+                            break;
+                    }
+                }
+
+                /* upload the chunk of waveform data */
+                memcpy(lpWave-&gt;lpData + dwOffset, lpChunk, nChunkSize);
+                AWriteAudioData(lpWave, dwOffset, nChunkSize);
+                if ((dwOffset += nChunkSize) &gt;= lpWave-&gt;dwLength)
+                    dwOffset = 0;
+                lpChunk += nChunkSize;
+                nLength -= nChunkSize;
+            }
+        }
+    }
+</pre>
+
+See Also <a href="#ACreateAudioData">ACreateAudioData</a>, <a href="#ADestroyAudioData">ADestroyAudioData</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ALoadWaveFile"><b>UINT AIAPI ALoadWaveFile(LPSTR lpszFileName, LPAUDIOWAVE* lplpWave, DWORD dwOffset)</b></a><p>
+
+Load a RIFF/WAVE waveform file from disk.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpszFileName</b>
+Filename of the .WAV waveform file on disk.</li>
+
+<li><b>lplpWave</b>
+Address of  a pointer to a waveform structure.</li>
+
+<li><b>dwOffset</b>
+Starting file offset of the waveform file.</li>
+</ul>
+
+This routine load a RIFF/WAVE waveform from disk. The loaded waveform must be released with the <a href="#AFreeWaveFile">AFreeWaveFile</a> routine.<p>
+
+<pre>
+    VOID PlayWaveFile(HAC hVoice, LPSTR lpszFileName)
+    {
+        LPAUDIOWAVE lpWave;
+        BOOL stopped;
+
+        if (ALoadWaveFile(lpszFileName, &lpWave, 0L) == AUDIO_ERROR_NONE) {
+            APlayVoice(hVoice, lpWave);
+            ASetVoiceVolume(hVoice, 64);
+            while (!kbhit()) {
+                AUpdateAudio();
+                AGetVoiceStatus(hVoice, &stopped);
+                if (stopped) break;
+            }
+            AFreeWaveFile(lpWave);
+        }
+    }
+</pre>
+
+See Also <a href="#AFreeWaveFile">AFreeWaveFile</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AFreeWaveFile"><b>UINT AIAPI AFreeWaveFile(LPAUDIOWAVE lpWave)</b></a><p>
+
+Releases a loaded RIFF/WAVE waveform file.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpWave</b>
+Address of the waveform structure to be released.</li>
+</ul>
+
+This routine releases waveform files loaded from disk. Your application can't use <a href="#ADestroyAudioData">ADestroyAudioData</a> to release waveforms loaded from disk. You must stop any voice that is playing the waveform before releasing it.<p>
+
+See Also <a href="#ALoadWaveFile">ALoadWaveFile</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="APlayModule"><b>UINT AIAPI APlayModule(LPAUDIOMODULE lpModule)</b></a><p>
+
+Start playing a music module file.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpModule</b>
+Address of the module to be played.</li>
+</ul>
+
+This routine start playing a module file in background using the audio system module player. Your application can stop a module by calling the <a href="#AStopModule">AStopModule</a> routine. The application must have enough available audio voices to play the music module.<p>
+
+See Also <a href="#AStopModule">AStopModule</a>
+
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AStopModule"><b>UINT AIAPI AStopModule(VOID)</b></a><p>
+
+Stop playing a music module file.<p>
+
+Returns zero on success.<p>
+
+This routine stop and releases the audio system module player. After calling this routine, your application can select and start another module by calling the <a href="#APlayModule">APlayModule</a> routine.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="APauseModule"><b>UINT AIAPI APauseModule(VOID)</b></a><p>
+
+Stop playing a music module file.<p>
+
+Returns zero on success.<p>
+
+This routine stop the audio system module player. You can later continue playing the music module by calling the <a href="#AResumeModule">AResumeModule</a> routine. Your application must use <a href="#AStopModule">AStopModule</a> when the currently select module file is going to be released, or if another music module must be played.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>, <a href="#AStopModule">AStopModule</a>, <a href="#AResumeModule">AResumeModule</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AResumeModule"><b>UINT AIAPI AResumeModule(VOID)</b></a><p>
+
+Restart playing a music module file.<p>
+
+Returns zero on success.<p>
+
+This routine is used to continue playing a music module that was previously paused by the <a href="#APauseModule">APauseModule</a> routine. Your application can use <a href="#AGETMODULESTATUS">AGetModuleStatus</a> to retrieve the current state of the audio system module player.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>, <a href="#AStopModule">AStopModule</a>, <a href="#APauseModule">APauseModule</a>, <a href="#AGETMODULESTATUS">AGetModuleStatus</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetModuleVolume"><b>UINT AIAPI ASetModuleVolume(UINT nVolume)</b></a><p>
+
+Changes the music module global volume.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>nVolume</b>
+The new volume level for the music module (0-64).</li>
+</ul>
+
+This routine changes the global volume at which the audio system is playing a music module sequence.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>, <a href="#AStopModule">AStopModule</a>, <a href="#AGetModuleVolume">AGetModuleVolume</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetModulePosition"><b>UINT AIAPI ASetModulePosition(UINT nOrder, UINT nRow)</b></a><p>
+
+Changes the music module playing position.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>nOrder</b>
+The new order position.</li>
+
+<li><b>nRow</b>
+The new pattern row number.</li>
+</ul>
+
+This routine changes the playing position of the audio system module player. Your application can use this routine to play small music sequences or patterns of sound effects, intro music, etc. all of them stored in the same music module file.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>, <a href="#AStopModule">AStopModule</a>, <a href="#AGetModulePosition">AGetModulePosition</a> 
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetModuleVolume"><b>UINT AIAPI AGetModuleVolume(LPUINT lpnVolume)</b></a><p>
+
+Retrieves the music module global volume.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpnVolume</b>
+Address of an unsigned integer that will hold the module volume.</li>
+</ul>
+
+This routine retrieves the global volume used by the audio system to play a music module sequence.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>, <a href="#AStopModule">AStopModule</a>, <a href="#ASetModuleVolume">ASetModuleVolume</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetModulePosition"><b>UINT AIAPI AGetModulePosition(LPUINT lpnOrder, LPUINT lpnRow)</b></a><p>
+
+Retrieves the music module playing position.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpnOrder</b>
+Address of an unsigned integer that will hold the order position.</li>
+
+<li><b>lpnRow</b>
+Address of an unsigned integer that will hold the pattern row number.</li>
+</ul>
+
+This routine retrieves the playing position of the audio system module player. Your application can use this routine to synchronize graphics or video with the music.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>, <a href="#AStopModule">AStopModule</a>, <a href="#ASetModulePosition">ASetModulePosition</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AGetModuleStatus"><b>UINT AIAPI AGetModuleStatus(LPBOOL lpbStatus)</b></a><p>
+
+Retrieves the current state of the music module player.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpbStatus</b>
+Address of an unsigned integer that will hold the status.</li>
+</ul>
+
+This routine retrieves the current status of the audio system module player. The routine returns true if the module player is paused or false otherwise. The audio system pauses the module file when the <a href="#APauseModule">APauseModule</a> routine is called or when the end of a non-looped music sequence is reached.<p>
+
+See Also <a href="#APlayModule">APlayModule</a>, <a href="#AStopModule">AStopModule</a>, <a href="#APauseModule">APauseModule</a>, <a href="#AResumeModule">AResumeModule</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ASetModuleCallback"><b>UINT AIAPI ASetModuleCallback(LPFNAUDIOCALLBACK lpfnAudioCallback)</b></a><p>
+
+Changes the music module synchronization callback routine.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpfnAudioCallback</b>
+Address of the synchronization callback routine.</li>
+</ul>
+
+This routine changes the synchronization routine that is called by the audio system module player whenever it encounters a synchronization mark in the pattern effects column, the argument of the effect is passed to the callback routine. For ScreamTracker 3.0 and FastTracker 2.0 modules, the command effect Znn is used for synchronization (where nn is an hexadecimal number passed to the synchronization callback routine). For applications running under DOS, the synchronization callback can be called from within a hardware interrupt handler routine.<p>
+
+<pre>
+    #define START_INTRO_SEQUENCE     0x01        /* Z01 */
+    #define START_VECTOR_GRAPHICS    0x02        /* Z02 */
+
+    VOID AIAPI SyncCallback(BYTE nParms, UINT nOrder, UINT nRow)
+    {
+        switch (nParms) {
+        case START_INTRO_SEQUENCE:
+            StartIntroSequence();
+            break;
+        case START_VECTOR_GRAPHICS:
+            StartVectorGraphics();
+            break;
+        default:
+            /* unknown Znn command found at position (nOrder, nRow) */
+             break;
+        }
+    }
+
+    VOID InitSyncCallback(VOID)
+    {
+        ASetModuleCallback(SyncCallback);
+    }
+
+    VOID DoneSyncCallback(VOID)
+    {
+        ASetModuleCallback(NULL);
+    }
+</pre>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="ALoadModuleFile"><b>UINT AIAPI ALoadModuleFile(LPSTR lpszFileName, LPAUDIOMODULE* lplpModule, DWORD dwOffset)</b></a><p>
+
+Load MOD/MTM/S3M/XM module files from disk.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpszFileName</b>
+File name of the music module file.</li>
+
+<li><b>lplpModule</b>
+Address of a music module reference variable.</li>
+
+<li><b>dwOffset</b>
+Starting file offset of the music module file.</li>
+</ul>
+
+This routine loads MOD/MTM/S3M/XM music module files from disk. The music module can be played and stopped by calling the <a href="#APlayModule">APlayModule</a> and <a href="#AStopModule">AStopModule</a> routines, respectively.<p>
+
+See Also <a href="#AFreeModuleFile">AFreeModuleFile</a>
+
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AFreeModuleFile"><b>UINT AIAPI AFreeModuleFile(LPAUDIOMODULE lpModule)</b></a><p>
+
+Releases a music module file from memory.<p>
+
+Returns zero on success.<p>
+
+<ul>
+<li><b>lpModule</b>
+Address of a music module file in memory.</li>
+</ul>
+
+This routine releases music module files from memory previously loaded by the <a href="#ALoadModuleFile">ALoadModuleFile</a> routine. Your application can't release modules currently being played by the audio system.<p>
+
+See Also <a href="#ALoadModuleFile">ALoadModuleFile</a>
+
+
+
+<h3>Structures</h3>
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AUDIOCAPS"><b>AUDIOCAPS</b></a><p>
+
+<pre>
+    typedef struct {
+        WORD    wProductId;
+        CHAR    szProductName[30];
+        DWORD   dwFormats;
+    } AUDIOCAPS, *LPAUDIOCAPS;
+</pre>
+
+The AUDIOCAPS structure contains the audio capabilities information that can be obtained by calling <a href="#AGetAudioDevCaps">AGetAudioDevCaps</a> for a given audio device driver.<p>
+
+Members:<p>
+
+<ul>
+<li><b>wProductId</b>
+Specifies the hardware audio device product identifier. This member can hold any of the following values:<p>
+
+<table>
+<tr><td><b>Value</b>        </td> <td><b>Description</b></td></tr>
+
+<tr><td>AUDIO_PRODUCT_NONE</td>   <td>Virtual silence device</td></tr>
+<tr><td>AUDIO_PRODUCT_SB</td>     <td>Sound Blaster 1.0 device</td></tr>
+<tr><td>AUDIO_PRODUCT_SB15</td>   <td>Sound Blaster 1.5 device</td></tr>
+<tr><td>AUDIO_PRODUCT_SB20</td>   <td>Sound Blaster 2.0 device</td></tr>
+<tr><td>AUDIO_PRODUCT_SBPRO</td>  <td>Sound Blaster Pro I or II device</td></tr>
+<tr><td>AUDIO_PRODUCT_SB16</td>   <td>Sound Blaster 16/ASP device</td></tr>
+<tr><td>AUDIO_PRODUCT_AWE32</td>  <td>Sound Blaster AWE32 device</td></tr>
+<tr><td>AUDIO_PRODUCT_WSS</td>    <td>Windows Sound System device</td></tr>
+<tr><td>AUDIO_PRODUCT_ESS</td>    <td>Ensoniq Soundscape (Elite) device</td></tr>
+<tr><td>AUDIO_PRODUCT_GUS</td>    <td>Gravis Ultrasound (GF1) device</td></tr>
+<tr><td>AUDIO_PRODUCT_GUSDB</td>  <td>Gravis Ultrasound Daughterboard device</td></tr>
+<tr><td>AUDIO_PRODUCT_GUSMAX</td> <td>Gravis Ultrasound Max (CS4231) device</td></tr>
+<tr><td>AUDIO_PRODUCT_IWAVE</td>  <td>AMD Interwave-based device</td></tr>
+<tr><td>AUDIO_PRODUCT_PAS</td>    <td>Pro Audio Spectrum (Plus) device</td></tr>
+<tr><td>AUDIO_PRODUCT_PAS16</td>  <td>Pro Audio Spectrum 16 device</td></tr>
+<tr><td>AUDIO_PRODUCT_ARIA</td>   <td>Sierra Semiconductors Aria Sound device</td></tr>
+<tr><td>AUDIO_PRODUCT_WINDOWS</td><td>Microsoft Windows WAVE device</td></tr>
+<tr><td>AUDIO_PRODUCT_DSOUND</td> <td>Microsoft Windows DirectSound device</td></tr>
+<tr><td>AUDIO_PRODUCT_LINUX</td>  <td>UNIX Sound System for Linux device</td></tr>
+<tr><td>AUDIO_PRODUCT_SPARC</td>  <td>SPARC workstation 8-bit ulaw or dbri device</td></tr>
+<tr><td>AUDIO_PRODUCT_SGI</td>    <td>Silicon Graphics Indigo Audio Ports device</td></tr>
+<tr><td>AUDIO_PRODUCT_OS2MMPM</td><td>OS/2 Multimedia Presentation Manager device</td></tr>
+<tr><td>AUDIO_PRODUCT_OS2DART</td><td>OS/2 DART Real Time Audio device</td></tr>
+<tr><td>AUDIO_PRODUCT_BEOSR3</td> <td>BeOS Release 3 OLD MediaKit device</td></tr>
+<tr><td>AUDIO_PRODUCT_BEOS</td>   <td>BeOS Release 4 New MediaKit device</td></tr>
+</table></li>
+
+<li><b>szProductName</b>
+Null terminated readable text string describing the hardware audio device product.</li>
+
+<li><b>dwFormats</b>
+Specifies the playback formats supported by the hardware audio device product. This member can be built using any combination of the following values:
+
+<table>
+<tr><td><b>Value</b>     </td>  <td><b>Description</b></td></tr>
+<tr><td>AUDIO_FORMAT_1M08</td>  <td>8-bit mono 11025 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_1S08</td>  <td>8-bit stereo 11025 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_1M16</td>  <td>16-bit mono 11025 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_1S16</td>  <td>16-bit stereo 11025 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_2M08</td>  <td>8-bit mono 22050 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_2S08</td>  <td>8-bit stereo 22050 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_2M16</td>  <td>16-bit mono 22050 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_2S16</td>  <td>16-bit stereo 22050 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_4M08</td>  <td>8-bit mono 44100 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_4S08</td>  <td>8-bit stereo 44100 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_4M16</td>  <td>16-bit mono 44100 Hz</td></tr>
+<tr><td>AUDIO_FORMAT_4S16</td>  <td>16-bit stereo 44100 Hz</td></tr>
+</table></li>
+
+</ul>
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AUDIOINFO"><b>AUDIOINFO</b></a><p>
+
+<pre>
+    typedef struct {
+        UINT    nDeviceId;
+        WORD    wFormat;
+        WORD    nSampleRate;
+    } AUDIOINFO, *LPAUDIOINFO;
+</pre>
+
+Audio information structure used to open the hardware audio device for playback by using the AOpenAudio<a href="#AOpenAudio"></a> routine.<p>
+
+Members:<p>
+
+<ul>
+<li><b>nDeviceId</b>
+Specifies the audio device we want to use for playback. The following virtual audio device identifiers are always defined:<p>
+
+<table>
+<tr><td><b>Value</b></td> <td><b>Description</b></td></tr>
+<tr><td>AUDIO_DEVICE_NONE</td>    <td>Silence device driver</td></tr>
+<tr><td>AUDIO_DEVICE_MAPPER</td>  <td>Audio mapper driver</td></tr>
+</table></li>
+
+<li><b>wFormat</b>
+Specifies the audio output format for playback. This member can be built using the following values:<p>
+
+<table>
+<tr><td><b>Value</b></td> <td><b>Description</b></td></tr>
+<tr><td>AUDIO_FORMAT_8BITS</td>  <td>        8 bits per sample</td></tr>
+<tr><td>AUDIO_FORMAT_16BITS</td>  <td>        16 bits per sample</td></tr>
+<tr><td>AUDIO_FORMAT_MONO</td>  <td>        Monophonic output</td></tr>
+<tr><td>AUDIO_FORMAT_STEREO</td>  <td>        Stereo output</td></tr>
+<tr><td>AUDIO_FORMAT_FILTER</td>  <td>        Enable filtering</td></tr>
+</table></li>
+
+<li><b>nSampleRate</b>
+Specifies the sampling frequency used for playback. It's recommended to use the standard frequencies 11025, 22050 or 44100 Hz for better compatibility.</li>
+</ul>
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AUDIOWAVE"><b>AUDIOWAVE</b></a><p>
+
+<pre>
+    typedef struct {
+        LPBYTE  lpData;
+        DWORD   dwHandle; 
+        DWORD   dwLength;
+        DWORD   dwLoopStart; 
+        DWORD   dwLoopEnd;
+        WORD    nSampleRate;
+        WORD    wFormat;
+    } AUDIOWAVE, *LPAUDIOWAVE;
+</pre>
+
+Audio waveform structure used to hold all the information related to a single waveform.
+
+Members:<p>
+
+<ul>
+<li><b>lpData</b>
+Read Only. Address of the a buffer in system memory used to hold the waveform data.</li>
+
+<li><b>dwHandle</b>
+Read Only. Handle used internally by the audio device drivers to reference the waveform data.</li>
+
+<li><b>dwLength</b>
+Specifies the length in bytes of the waveform data.</li>
+
+<li><b>dwLoopStart</b>
+Specifies the loop start point measured in bytes, only used for looped samples.</li>
+
+<li><b>dwLoopEnd</b>
+Specifies the loop end point measured in bytes, only used for looped samples.</li>
+
+<li><b>nSampleEate</b>
+The default sampling frequency of the waveform data.</li>
+
+<li><b>wFormat</b>
+Specifies the format and the looping type of the waveform data. This member can be built using the following defines:<p>
+
+<table>
+<tr><td><b>Value</b></td> <td><b>Description</b></td></tr>
+<tr><td>AUDIO_FORMAT_8BITS   </td>  <td>8 bits per sample</td></tr>
+<tr><td>AUDIO_FORMAT_16BITS  </td>  <td>16 bits per sample</td></tr>
+<tr><td>AUDIO_FORMAT_MONO    </td>  <td>Monophonic output</td></tr>
+<tr><td>AUDIO_FORMAT_STEREO  </td>  <td>Stereo output</td></tr>
+<tr><td>AUDIO_FORMAT_LOOP    </td>  <td>Forward looping</td></tr>
+<tr><td>AUDIO_FORMAT_BIDILOOP</td>  <td>Bidirectional looping</td></tr>
+<tr><td>AUDIO_FORMAT_REVERSE </td>  <td>Reverse playing</td></tr>
+</table></li>
+</ul>
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="AUDIOMODULE"><b>AUDIOMODULE</b></a><p>
+
+<pre>
+    typedef struct {
+        CHAR    szModuleName[32];
+        WORD    wFlags;
+        WORD    nOrders;
+        WORD    nRestart;
+        WORD    nTracks;
+        WORD    nPatterns;
+        WORD    nPatches;
+        WORD    nTempo;
+        WORD    nBPM;
+        BYTE    aOrderTable[AUDIO_MAX_ORDERS];
+        BYTE    aPanningTable[AUDIO_MAX_VOICES];
+        LPAUDIOPATTERN aPatternTable;
+        LPAUDIOPATCH aPatchTable;
+    } AUDIOMODULE, *LPAUDIOMODULE;
+</pre>
+
+This structure holds all the information related to a single music module file loaded in system memory.<p>
+
+Members:<p>
+
+<ul>
+<li><b>szModuleName</b>
+Specifies the music module name as a null-terminated text string.</li>
+
+<li><b>wFlags</b>
+Specifies some intial flags for the music module. This member can be built using the following values:<p>
+
+<table>
+<tr><td><b>Value</b></td> <td><b>Description</b></td></tr>
+<tr><td>AUDIO_MODULE_LINEAR</td>  <td>        The module uses linear frequencies</td></tr>
+<tr><td>AUDIO_MODULE_AMIGA</td>  <td>        Use Amiga logarithmic frequencies</td></tr>
+<tr><td>AUDIO_MODULE_PANNING</td>  <td>        Use pan position from instruments</td></tr>
+</table></li>
+
+<li><b>nOrders</b>
+Number of entries in the sequence order table.</li>
+
+<li><b>nRestart</b>
+Specifies the restart order position for looped modules.</li>
+
+<li><b>nTracks</b>
+Number of tracks used in the music module.</li>
+
+<li><b>nPatterns</b>
+Number of patterns used in the music module.</li>
+
+<li><b>nPatches</b>
+Number of patches or instruments used in the music module.</li>
+
+<li><b>nTempo</b>
+Initial speed or tempo value.</li>
+
+<li><b>nBPM</b>
+Initial BPM or beats per minute value.</li>
+
+<li><b>aOrderTable</b>
+Specifies the sequence order in which the patterns are played.</li>
+
+<li><b>aPanningTable</b>
+Initial stereo pan position for all the music module tracks.</li>
+
+<li><b>aPatternTable</b>
+Array of pattern structures.</li>
+
+<li><b>aPatchTable</b>
+Array of patches structures.</li>
+</ul>
+
+<! ----------------------------------------------------------------------- !>
+<hr><a name="RETURN_CODES"><b>RETURN CODES</b></a><p>
+
+<table>
+<tr><td><b>Value</b></td> <td><b>Description</b></td></tr>
+<tr><td>AUDIO_ERROR_NONE</td> <td>No error</td></tr>
+<tr><td>AUDIO_ERROR_INVALHANDLE</td>  <td>Invalid voice or waveform handle</td></tr>
+<tr><td>AUDIO_ERROR_INVALPARAM</td>  <td>Invalid parameter passed</td></tr>
+<tr><td>AUDIO_ERROR_NOTSUPPORTED</td>  <td>Invalid audio system call</td></tr>
+<tr><td>AUDIO_ERROR_BADDEVICEID</td>  <td>Invalid device identifier</td></tr>
+<tr><td>AUDIO_ERROR_NODEVICE</td>  <td>No audio device found</td></tr>
+<tr><td>AUDIO_ERROR_DEVICEBUSY</td>  <td>Audio device is busy</td></tr>
+<tr><td>AUDIO_ERROR_BADFORMAT</td>  <td>Bad or unsupported audio playback format</td></tr>
+<tr><td>AUDIO_ERROR_NOMEMORY</td>  <td>Not enough system memory</td></tr>
+<tr><td>AUDIO_ERROR_NODRAMMEMORY</td>  <td>Not enough onboard DRAM memory</td></tr>
+<tr><td>AUDIO_ERROR_FILENOTFOUND</td>  <td>Module or waveform file not found</td></tr>
+<tr><td>AUDIO_ERROR_BADFILEFORMAT</td>  <td>Invalid module or waveform file format</td></tr>
+</table>
+
+<hr>
+<small>November 30th, 1998.</small>
+
+</body>
+</html>

@@ -1,11 +1,17 @@
 /*
- * $Id: gusdrv.c 1.6 1996/05/24 08:30:44 chasan released $
+ * $Id: gusdrv.c 1.11 1996/09/22 20:17:51 chasan released $
  *
- * Advanced Gravis UltraSound audio driver.
+ * Advanced Gravis UltraSound (GF1 and InterWave) audio driver.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
+
+#define INTERWAVE
 
 #include <string.h>
 #include "audio.h"
@@ -167,6 +173,41 @@
 #define GF1_GET_NUMVOICES       0x8E    /* active voices register */
 #define GF1_GET_IRQ_STAT        0x8F    /* IRQ source register */
 
+#ifdef INTERWAVE
+/*
+ * Interwave global indirect register indexes (3X3)
+ */
+#define IW_LDSAHI               0x50    /* LMC DMA start addr high register */
+#define IW_LMCFI                0x52    /* local memory config register */
+
+/*
+ * InterWave voice indirect register indexes (3X3)
+ */
+#define IW_SROI_WR              0x0C    /* synth right offset register */
+#define IW_SROI_RD              0x8C
+#define IW_SLOI_WR              0x13    /* synth left offset register */
+#define IW_SLOI_RD              0x93
+#define IW_SUAI_WR              0x10    /* synth upper address register */
+#define IW_SUAI_RD              0x90
+#define IW_SMSI_WR              0x15    /* synth mode select register */
+#define IW_SMSI_RD              0x95
+#define IW_SGMI_WR              0x19    /* synth global mode register */
+#define IW_SGMI_RD              0x99
+
+/*
+ * InterWave synth mode select register bit fields (15,95)
+ */
+#define IW_SMSI_VOICE_DISABLE   0x02    /* de-activate enhanced voice */
+#define IW_SMSI_VOICE_OFFSET    0x20    /* enable smooth voice panning */
+
+/* 
+ * InterWave synth global mode register bit fields (19,99)
+ */
+#define IW_SGMI_ENHMODE         0x01    /* enable enhanced mode */
+#define IW_SGMI_ENABLE_LFOS     0x02    /* enable LFOs */
+
+#endif
+
 /*
  * GF1 voice control register bit fields (00,80)
  */
@@ -273,13 +314,13 @@
 /*
  * GF1 IRQ and DMA interface latch tables
  */
-static UCHAR aIrqLatchTable[] =
+static BYTE aIrqLatchTable[] =
 {
     0x00, 0x00, 0x01, 0x03, 0x00, 0x02, 0x00, 0x04,
-    0x00, 0x00, 0x00, 0x05, 0x06, 0x00, 0x00, 0x07
+    0x00, 0x01, 0x00, 0x05, 0x06, 0x00, 0x00, 0x07
 };
 
-static UCHAR aDmaLatchTable[] =
+static BYTE aDmaLatchTable[] =
 {
     0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x04, 0x05
 };
@@ -287,14 +328,14 @@ static UCHAR aDmaLatchTable[] =
 /*
  * GF1 sampling frequencies and linear volumes table
  */
-static USHORT aFrequencyTable[] =
+static WORD aFrequencyTable[] =
 {
     44100, 41160, 38587, 36317, 34300, 32494, 30870, 29400,
     28063, 26843, 25725, 24696, 23746, 22866, 22050, 21289,
     20580, 19916, 19293
 };
 
-static USHORT aVolumeTable[65] =
+static WORD aVolumeTable[65] =
 {
     0x0400,
     0x07FF, 0x0980, 0x0A40, 0x0AC0, 0x0B20, 0x0B60, 0x0BA0, 0x0BE0,
@@ -307,30 +348,81 @@ static USHORT aVolumeTable[65] =
     0x0EC4, 0x0ECC, 0x0ED4, 0x0EDC, 0x0EE4, 0x0EEC, 0x0EF4, 0x0EFC
 };
 
+#ifdef INTERWAVE
+/*
+ * InterWave panning table
+ */
+static WORD aPanningTable[128] =
+{
+    0xFFF0, 0x6FD0, 0x5FD0, 0x5670, 0x4FD0, 0x4AB0, 0x4670, 0x42E0,
+    0x3FD0, 0x3D20, 0x3AB0, 0x3870, 0x3670, 0x34A0, 0x32E0, 0x3150,
+    0x2FD0, 0x2E70, 0x2D20, 0x2BE0, 0x2AB0, 0x2990, 0x2870, 0x2770,
+    0x2670, 0x2580, 0x24A0, 0x23C0, 0x22E0, 0x2210, 0x2150, 0x2090,
+    0x1FD0, 0x1F20, 0x1E70, 0x1DC0, 0x1D20, 0x1C70, 0x1BE0, 0x1B40,
+    0x1AB0, 0x1A20, 0x1990, 0x1900, 0x1870, 0x17F0, 0x1770, 0x16F0,
+    0x1670, 0x1600, 0x1580, 0x1510, 0x14A0, 0x1430, 0x13C0, 0x1350,
+    0x12E0, 0x1280, 0x1210, 0x11B0, 0x1150, 0x10F0, 0x1090, 0x1030,
+    0x0FD0, 0x0F70, 0x0F20, 0x0EC0, 0x0E70, 0x0E10, 0x0DC0, 0x0D70,
+    0x0D20, 0x0CD0, 0x0C70, 0x0C30, 0x0BE0, 0x0B90, 0x0B40, 0x0AF0,
+    0x0AB0, 0x0A60, 0x0A20, 0x09D0, 0x0990, 0x0940, 0x0900, 0x08C0,
+    0x0870, 0x0830, 0x07F0, 0x07B0, 0x0770, 0x0730, 0x06F0, 0x06B0,
+    0x0670, 0x0640, 0x0600, 0x05C0, 0x0580, 0x0550, 0x0510, 0x04D0,
+    0x04A0, 0x0460, 0x0430, 0x03F0, 0x03C0, 0x0380, 0x0350, 0x0320,
+    0x02E0, 0x02B0, 0x0280, 0x0250, 0x0210, 0x01E0, 0x01B0, 0x0180,
+    0x0150, 0x0120, 0x00F0, 0x00C0, 0x0090, 0x0060, 0x0030, 0x0000
+};
+
+/*
+ * InterWave supported DRAM bank configurations
+ */
+static WORD aBankCfgTable[13][4] =
+{
+    {  256,    0,    0,    0 },     /* 0x00 -   256K */
+    {  256,  256,    0,    0 },     /* 0x01 -   512K */
+    {  256,  256,  256,  256 },     /* 0x02 -  1024K */
+    {  256, 1024,    0,    0 },     /* 0x03 -  1280K */
+    {  256, 1024, 1024, 1024 },     /* 0x04 -  3328K */
+    {  256,  256, 1024,    0 },     /* 0x05 -  1536K */
+    {  256,  256, 1024, 1024 },     /* 0x06 -  2560K */
+    { 1024,    0,    0,    0 },     /* 0x07 -  1024K */
+    { 1024, 1024,    0,    0 },     /* 0x08 -  2048K */
+    { 1024, 1024, 1024, 1024 },     /* 0x09 -  4096K */
+    { 4096,    0,    0,    0 },     /* 0x0A -  4096K */
+    { 4096, 4096,    0,    0 },     /* 0x0B -  8192K */
+    { 4096, 4096, 4096, 4096 }      /* 0x0C - 16384K */
+};
+#endif
+
 
 /* GF1 configuration and shadow registers */
 static struct {
-    USHORT  wPort;                      /* GF1 base port address */
-    UCHAR   nIrqLine;                   /* GF1 interrupt line */
-    UCHAR   nMidiIrqLine;               /* MIDI interrupt line */
-    UCHAR   nDramDmaChannel;            /* DRAM DMA channel */
-    UCHAR   nAdcDmaChannel;             /* ADC DMA channel */
-    ULONG   dwMemorySize;               /* GF1 DRAM total memory */
+#ifdef INTERWAVE
+    WORD    wId;                        /* audio device identifier */
+#endif
+    WORD    wPort;                      /* GF1 base port address */
+    BYTE    nIrqLine;                   /* GF1 interrupt line */
+    BYTE    nMidiIrqLine;               /* MIDI interrupt line */
+    BYTE    nDramDmaChannel;            /* DRAM DMA channel */
+    BYTE    nAdcDmaChannel;             /* ADC DMA channel */
+    DWORD   dwMemorySize;               /* GF1 DRAM total memory */
     LONG    dwFreqDivisor;              /* current frequency divisor */
-    UCHAR   bMixControl;                /* board mix control register */
-    UCHAR   bTimerControl;              /* timer control register */
-    UCHAR   bTimerMask;                 /* timer data shadow register */
-    UCHAR   bIrqControl;                /* board IRQ control register */
-    UCHAR   bDmaControl;                /* board DMA control register */
-    UCHAR   nVoices;                    /* active voices register */
-    ULONG   aVoiceStart[32];            /* voice start address registers */
-    ULONG   aVoiceLength[32];           /* voice length in samples */
+    BYTE    bMixControl;                /* board mix control register */
+    BYTE    bTimerControl;              /* timer control register */
+    BYTE    bTimerMask;                 /* timer data shadow register */
+    BYTE    bIrqControl;                /* board IRQ control register */
+    BYTE    bDmaControl;                /* board DMA control register */
+    BYTE    nVoices;                    /* active voices register */
+    DWORD   aVoiceStart[32];            /* voice start address registers */
+    DWORD   aVoiceLength[32];           /* voice length in samples */
     LONG    dwTimer1Accum;              /* timer #1 accumulator */
     LONG    dwTimer1Rate;               /* timer #1 rate */
     LONG    dwTimer2Accum;              /* timer #2 accumulator */
     LONG    dwTimer2Rate;               /* timer #2 rate */
-    PFNAUDIOTIMER pfnTimer1Handler;     /* timer #1 callback */
-    PFNAUDIOTIMER pfnTimer2Handler;     /* timer #2 callback */
+    LPFNAUDIOTIMER lpfnTimer1Handler;   /* timer #1 callback */
+    LPFNAUDIOTIMER lpfnTimer2Handler;   /* timer #2 callback */
+#ifdef INTERWAVE
+    DWORD   aBankSize[4];               /* Local Memory Bank Configs */
+#endif
 } GF1;
 
 static volatile BOOL fDramDmaPending;
@@ -339,36 +431,36 @@ static volatile BOOL fDramDmaPending;
 /*
  * GF1 basic programming routines
  */
-static VOID GF1SelectVoice(UCHAR nVoice)
+static VOID GF1SelectVoice(BYTE nVoice)
 {
     OUTB(GF1.wPort + GUS_GF1_PAGE, nVoice);
 }
 
-static VOID GF1PortB(UCHAR nIndex, UCHAR bData)
+static VOID GF1PortB(BYTE nIndex, BYTE bData)
 {
     OUTB(GF1.wPort + GUS_GF1_INDEX, nIndex);
     OUTB(GF1.wPort + GUS_GF1_DATA_HIGH, bData);
 }
 
-static VOID GF1PortW(UCHAR nIndex, USHORT wData)
+static VOID GF1PortW(BYTE nIndex, WORD wData)
 {
     OUTB(GF1.wPort + GUS_GF1_INDEX, nIndex);
     OUTW(GF1.wPort + GUS_GF1_DATA_LOW, wData);
 }
 
-static UCHAR GF1PortRB(UCHAR nIndex)
+static BYTE GF1PortRB(BYTE nIndex)
 {
     OUTB(GF1.wPort + GUS_GF1_INDEX, nIndex);
     return INB(GF1.wPort + GUS_GF1_DATA_HIGH);
 }
 
-static USHORT GF1PortRW(UCHAR nIndex)
+static WORD GF1PortRW(BYTE nIndex)
 {
     OUTB(GF1.wPort + GUS_GF1_INDEX, nIndex);
     return INW(GF1.wPort + GUS_GF1_DATA_LOW);
 }
 
-static UCHAR GF1GetIrqStatus(VOID)
+static BYTE GF1GetIrqStatus(VOID)
 {
     return INB(GF1.wPort + GUS_GF1_IRQ_STAT);
 }
@@ -403,7 +495,7 @@ static VOID GF1StopTimer(UINT nTimer)
     OUTB(GF1.wPort + GUS_GF1_TIMER_DATA, GF1.bTimerMask);
 }
 
-static VOID GF1SetTimerRate(UINT nTimer, UCHAR nCount)
+static VOID GF1SetTimerRate(UINT nTimer, BYTE nCount)
 {
     if (nTimer == 1) {
         GF1PortB(GF1_TIMER1_COUNT, 256 - nCount);
@@ -457,55 +549,63 @@ static VOID GF1DisableMicIn(VOID)
 /*
  * GF1 basic onboard DRAM programming routines
  */
-static ULONG GF1ConvertTo16Bits(ULONG dwAddr)
+static DWORD GF1ConvertTo16Bits(DWORD dwAddr)
 {
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        return (dwAddr >> 1);
+#endif
     return ((dwAddr >> 1) & 0x0001FFFFL) | (dwAddr & 0x000C0000L);
 }
 
-static ULONG GF1ConvertFrom16Bits(ULONG dwAddr)
+static DWORD GF1ConvertFrom16Bits(DWORD dwAddr)
 {
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        return (dwAddr << 1);
+#endif
     return ((dwAddr << 1) & 0x0003FFFFL) | (dwAddr & 0x000C0000L);
 }
 
-static UCHAR GF1PeekB(ULONG dwAddr)
+static BYTE GF1PeekB(DWORD dwAddr)
 {
     GF1PortW(GF1_DRAM_ADDR_LOW, LOWORD(dwAddr));
-    GF1PortB(GF1_DRAM_ADDR_HIGH, (UCHAR) HIWORD(dwAddr));
+    GF1PortB(GF1_DRAM_ADDR_HIGH, (BYTE) HIWORD(dwAddr));
     return INB(GF1.wPort + GUS_GF1_DRAM_DATA);
 }
 
-static VOID GF1PokeB(ULONG dwAddr, UCHAR bData)
+static VOID GF1PokeB(DWORD dwAddr, BYTE bData)
 {
     GF1PortW(GF1_DRAM_ADDR_LOW, LOWORD(dwAddr));
-    GF1PortB(GF1_DRAM_ADDR_HIGH, (UCHAR) HIWORD(dwAddr));
+    GF1PortB(GF1_DRAM_ADDR_HIGH, (BYTE) HIWORD(dwAddr));
     OUTB(GF1.wPort + GUS_GF1_DRAM_DATA, bData);
 }
 
-static USHORT GF1PeekW(ULONG dwAddr)
+static WORD GF1PeekW(DWORD dwAddr)
 {
-    USHORT wLoData, wHiData;
+    WORD wLoData, wHiData;
 
     wLoData = GF1PeekB(dwAddr + 0);
     wHiData = GF1PeekB(dwAddr + 1);
     return MAKEWORD(wLoData, wHiData);
 }
 
-static VOID GF1PokeW(ULONG dwAddr, USHORT wData)
+static VOID GF1PokeW(DWORD dwAddr, WORD wData)
 {
     GF1PokeB(dwAddr + 0, LOBYTE(wData));
     GF1PokeB(dwAddr + 1, HIBYTE(wData));
 }
 
-static ULONG GF1PeekDW(ULONG dwAddr)
+static DWORD GF1PeekDW(DWORD dwAddr)
 {
-    ULONG dwLoData, dwHiData;
+    DWORD dwLoData, dwHiData;
 
     dwLoData = GF1PeekW(dwAddr + 0);
     dwHiData = GF1PeekW(dwAddr + 2);
     return MAKELONG(dwLoData, dwHiData);
 }
 
-static VOID GF1PokeDW(ULONG dwAddr, ULONG dwData)
+static VOID GF1PokeDW(DWORD dwAddr, DWORD dwData)
 {
     GF1PokeW(dwAddr + 0, LOWORD(dwData));
     GF1PokeW(dwAddr + 2, HIWORD(dwData));
@@ -513,20 +613,20 @@ static VOID GF1PokeDW(ULONG dwAddr, ULONG dwData)
 
 #ifdef USEPOKE
 
-static VOID GF1PokeBytes(ULONG dwAddr, PUCHAR pBuffer, UINT nSize)
+static VOID GF1PokeBytes(DWORD dwAddr, LPBYTE lpBuffer, UINT nSize)
 {
-    ULONG dwChunkSize;
+    DWORD dwChunkSize;
 
     while (nSize != 0) {
         dwChunkSize = 0x10000L - LOWORD(dwAddr);
         if (dwChunkSize > nSize)
             dwChunkSize = nSize;
         nSize -= dwChunkSize;
-        GF1PortB(GF1_DRAM_ADDR_HIGH, (UCHAR) HIWORD(dwAddr));
+        GF1PortB(GF1_DRAM_ADDR_HIGH, (BYTE) HIWORD(dwAddr));
         GF1PortW(GF1_DRAM_ADDR_LOW, LOWORD(dwAddr));
         while (dwChunkSize--) {
             OUTW(GF1.wPort + GUS_GF1_DATA_LOW, LOWORD(dwAddr));
-            OUTB(GF1.wPort + GUS_GF1_DRAM_DATA, *pBuffer++);
+            OUTB(GF1.wPort + GUS_GF1_DRAM_DATA, *lpBuffer++);
             dwAddr++;
         }
     }
@@ -534,11 +634,11 @@ static VOID GF1PokeBytes(ULONG dwAddr, PUCHAR pBuffer, UINT nSize)
 
 #else
 
-static VOID GF1UploadData(USHORT wFormat, ULONG dwAddr,
-        PUCHAR pBuffer, UINT nSize)
+static VOID GF1UploadData(WORD wFormat, DWORD dwAddr,
+			  LPBYTE lpBuffer, UINT nSize)
 {
-    PUCHAR pDmaBuffer;
-    UCHAR bControl;
+    LPBYTE lpDmaBuffer;
+    BYTE bControl;
     UINT nChannelCount, nTimeOut, nCount;
 
     /*
@@ -546,7 +646,7 @@ static VOID GF1UploadData(USHORT wFormat, ULONG dwAddr,
      * direct I/O to poke the unaligned bytes into DRAM memory.
      */
     while ((dwAddr & 0x1F) != 0x00 && nSize != 0) {
-        GF1PokeB(dwAddr++, *pBuffer++);
+        GF1PokeB(dwAddr++, *lpBuffer++);
         nSize--;
     }
 
@@ -569,8 +669,8 @@ static VOID GF1UploadData(USHORT wFormat, ULONG dwAddr,
          * under Windows 95 or any other operating system that provides
          * virtualized DMA controllers.
          */
-        if ((pDmaBuffer = DosLockChannel(GF1.nDramDmaChannel)) != NULL) {
-            memcpy(pDmaBuffer, pBuffer, nCount);
+        if ((lpDmaBuffer = DosLockChannel(GF1.nDramDmaChannel)) != NULL) {
+            memcpy(lpDmaBuffer, lpBuffer, nCount);
             DosUnlockChannel(GF1.nDramDmaChannel);
         }
         DosSetupChannel(GF1.nDramDmaChannel, DMA_WRITE, nCount);
@@ -578,14 +678,25 @@ static VOID GF1UploadData(USHORT wFormat, ULONG dwAddr,
 
         /* setup the starting DRAM address in paragraphs */
         GF1PortW(GF1_DMA_ADDR, (bControl & DRAM_DMA_WIDTH_16 ?
-            GF1ConvertTo16Bits(dwAddr) : dwAddr) >> 4);
+				GF1ConvertTo16Bits(dwAddr) : dwAddr) >> 4);
+
+#ifdef INTERWAVE
+        if (GF1.wId == AUDIO_PRODUCT_IWAVE) {
+            DWORD dwLDSA;
+            dwLDSA = bControl & DRAM_DMA_WIDTH_16 ?
+                GF1ConvertTo16Bits(dwAddr) : dwAddr;
+            /* set DRAM address bits 23:20 and 3:0 */
+            GF1PortB(IW_LDSAHI, 
+		     ((dwLDSA >> 16) & 0x00F0) | (dwLDSA & 0x000F));
+        }
+#endif
 
         /* start DMA DRAM transfer */
         GF1PortB(GF1_DRAM_DMA_CTRL, bControl);
 
         /* wait until the DMA transfer finishes */
         for (nTimeOut = nChannelCount = 0; nTimeOut < DMA_TIMEOUT &&
-                !fDramDmaPending; nTimeOut++) {
+		 !fDramDmaPending; nTimeOut++) {
             if (DosGetChannelCount(GF1.nDramDmaChannel) != nChannelCount) {
                 nChannelCount = DosGetChannelCount(GF1.nDramDmaChannel);
                 nTimeOut = 0;
@@ -594,11 +705,11 @@ static VOID GF1UploadData(USHORT wFormat, ULONG dwAddr,
 
         /* stop DMA DRAM transfer */
         GF1PortB(GF1_DRAM_DMA_CTRL,
-            GF1PortRB(GF1_DRAM_DMA_CTRL) & ~DRAM_DMA_ENABLE);
+		 GF1PortRB(GF1_DRAM_DMA_CTRL) & ~DRAM_DMA_ENABLE);
         DosDisableChannel(GF1.nDramDmaChannel);
 
         /* advance the pointers to the next chunk */
-        pBuffer += nCount;
+        lpBuffer += nCount;
         dwAddr += nCount;
         nSize -= nCount;
     }
@@ -622,7 +733,7 @@ static VOID GF1Delay(VOID)
 
 static VOID GF1Reset(UINT nVoices)
 {
-    ULONG dwData;
+    DWORD dwData;
     UINT n;
 
     /* number of voices must be between 14 and 32 */
@@ -634,6 +745,11 @@ static VOID GF1Reset(UINT nVoices)
     /* reset GF1 shadow registers */
     GF1.nVoices = nVoices;
     GF1.dwFreqDivisor = aFrequencyTable[nVoices - 14];
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        /* InterWave is always at 44100 Hz */
+        GF1.dwFreqDivisor = 44100;
+#endif
     GF1.bMixControl = MIXER_DISABLE_LINE_IN |
         MIXER_DISABLE_LINE_OUT | MIXER_ENABLE_LATCHES;
     GF1.bTimerControl = 0x00;
@@ -659,6 +775,12 @@ static VOID GF1Reset(UINT nVoices)
     for (n = 0; n < 16; n++)
         GF1Delay();
     OUTB(GF1.wPort + GUS_MIDI_CTRL, 0x00);
+
+#ifdef INTERWAVE
+    /* force InterWave native node */
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        GF1PortB(IW_SGMI_WR, GF1PortRB(IW_SGMI_RD) | IW_SGMI_ENHMODE);
+#endif
 
     /* clear all the GF1 interrupts */
     GF1PortB(GF1_DRAM_DMA_CTRL, 0x00);
@@ -696,6 +818,18 @@ static VOID GF1Reset(UINT nVoices)
         GF1PortW(GF1_SET_VOLUME, 0x04000);
         GF1PortW(GF1_SET_ACCUM_HIGH, 0x0000);
         GF1PortW(GF1_SET_ACCUM_LOW, 0x0000);
+#ifdef INTERWAVE
+        if (GF1.wId == AUDIO_PRODUCT_IWAVE) {
+            /* active voice smooth panning */
+            GF1PortB(IW_SMSI_WR, IW_SMSI_VOICE_OFFSET);
+            /* InterWave synth upper address */
+            GF1PortB(IW_SUAI_WR, 0x00);
+            /* InterWave synth left offset */
+            GF1PortW(IW_SLOI_WR, aPanningTable[64]);
+            /* InterWave synth right offset */
+            GF1PortW(IW_SROI_WR, aPanningTable[64]);
+        }
+#endif
     }
 
     /* clear interrupt on voices (again) */
@@ -706,7 +840,7 @@ static VOID GF1Reset(UINT nVoices)
 
     /* setup GF1 synth for interrupts and enable DACs */
     GF1PortB(GF1_MASTER_RESET, MASTER_RESET |
-        MASTER_ENABLE_DAC | MASTER_ENABLE_IRQ);
+	     MASTER_ENABLE_DAC | MASTER_ENABLE_IRQ);
 }
 
 static VOID GF1SetInterface(VOID)
@@ -760,7 +894,7 @@ static VOID GF1SetInterface(VOID)
 
 static VOID AIAPI GF1InterruptHandler(VOID)
 {
-    UCHAR bIrqStatus, nPage, nRegister;
+    BYTE bIrqStatus, nPage, nRegister;
 
     nPage = INB(GF1.wPort + GUS_GF1_PAGE);
     nRegister = INB(GF1.wPort + GUS_GF1_INDEX);
@@ -768,22 +902,22 @@ static VOID AIAPI GF1InterruptHandler(VOID)
         if (bIrqStatus & IRQ_STAT_TIMER1) {
             GF1PortB(GF1_TIMER_CTRL, GF1.bTimerControl & ~TIMER1_IRQ_ENABLE);
             GF1PortB(GF1_TIMER_CTRL, GF1.bTimerControl);
-            if (GF1.pfnTimer1Handler != NULL) {
+            if (GF1.lpfnTimer1Handler != NULL) {
                 GF1.dwTimer1Accum += GF1.dwTimer1Rate;
                 while (GF1.dwTimer1Accum >= 0x10000L) {
                     GF1.dwTimer1Accum -= 0x10000L;
-                    GF1.pfnTimer1Handler();
+                    GF1.lpfnTimer1Handler();
                 }
             }
         }
         if (bIrqStatus & IRQ_STAT_TIMER2) {
             GF1PortB(GF1_TIMER_CTRL, GF1.bTimerControl & ~TIMER2_IRQ_ENABLE);
             GF1PortB(GF1_TIMER_CTRL, GF1.bTimerControl);
-            if (GF1.pfnTimer2Handler != NULL) {
+            if (GF1.lpfnTimer2Handler != NULL) {
                 GF1.dwTimer2Accum += GF1.dwTimer2Rate;
                 while (GF1.dwTimer2Accum >= 0x10000L) {
                     GF1.dwTimer2Accum -= 0x10000L;
-                    GF1.pfnTimer2Handler();
+                    GF1.lpfnTimer2Handler();
                 }
             }
         }
@@ -800,7 +934,7 @@ static VOID AIAPI GF1InterruptHandler(VOID)
 
 static BOOL GF1Probe(VOID)
 {
-    USHORT wData, wMyData;
+    WORD wData, wMyData;
 
     /* pull a reset on the GF1 */
     GF1PortB(GF1_MASTER_RESET, 0x00);
@@ -823,10 +957,60 @@ static BOOL GF1Probe(VOID)
 /*
  * GF1 onboard DRAM memory manager routines
  */
-static ULONG GF1MemorySize(VOID)
+static DWORD GF1MemorySize(VOID)
 {
-    ULONG dwAddr;
+    DWORD dwAddr;
 
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE) {
+        UINT nBank, nBankCfg;
+
+        /* force InterWave enhanced mode */
+        GF1PortB(IW_SGMI_WR, GF1PortRB(IW_SGMI_RD) | IW_SGMI_ENHMODE);
+
+        /* enable full access to 16MB */
+        GF1PortW(IW_LMCFI, (GF1PortRW(IW_LMCFI) & 0xFFF0) | 0x0C);
+
+        /* clean every RAM step location */
+        for (dwAddr = 0x0000000L; dwAddr < 0x1000000L; dwAddr += 0x10000L)
+            GF1PokeDW(dwAddr, 0x12345678L);
+
+        /* determine amount of DRAM in each bank */
+        for (nBank = 0; nBank < 4; nBank++) {
+            GF1.aBankSize[nBank] = 0;
+            dwAddr = ((DWORD) nBank) << 22;
+            if (GF1PeekDW(dwAddr) == 0x12345678L) {
+                GF1PokeDW(dwAddr, 0x55AA55AAL);
+                if (GF1PeekDW(dwAddr) == 0x55AA55AAL) {
+                    /* each bank can have up to 4MB of memory */
+                    while ((GF1.aBankSize[nBank] += 64) < 4096) {
+                        dwAddr += 0x10000L;
+                        if (GF1PeekDW(dwAddr) == 0x55AA55AAL) break;
+                    }
+                }
+            }
+        }
+
+        for (nBankCfg = 0; nBankCfg < 13; nBankCfg++) {
+            if (aBankCfgTable[nBankCfg][0] == GF1.aBankSize[0] &&
+                aBankCfgTable[nBankCfg][1] == GF1.aBankSize[1] &&
+                aBankCfgTable[nBankCfg][2] == GF1.aBankSize[2] &&
+                aBankCfgTable[nBankCfg][3] == GF1.aBankSize[3]) {
+                /* set up contiguous access to local memory banks */
+                GF1PortW(IW_LMCFI, (GF1PortRW(IW_LMCFI) & 0xFFF0) | nBankCfg);
+                GF1.aBankSize[0] += 
+                    GF1.aBankSize[1] + GF1.aBankSize[2] + GF1.aBankSize[3];
+                GF1.aBankSize[1] = GF1.aBankSize[2] = GF1.aBankSize[3] = 0;
+                return (DWORD) GF1.aBankSize[0] << 10;
+            }
+        }
+
+        /* enable non-contiguous access to local memory banks */
+        GF1PortW(IW_LMCFI, (GF1PortRW(IW_LMCFI) & 0xFFF0) | 0x0C);
+        return (DWORD)(GF1.aBankSize[0] + GF1.aBankSize[1] +
+		       GF1.aBankSize[2] + GF1.aBankSize[3]) << 10;
+    }
+#endif
     dwAddr = 0x00000L;
     GF1PokeDW(dwAddr, 0x12345678L);
     if (GF1PeekDW(dwAddr) == 0x12345678L) {
@@ -842,12 +1026,61 @@ static ULONG GF1MemorySize(VOID)
     return dwAddr;
 }
 
+static LONG GF1MemAvail(VOID)
+{
+    DWORD dwPrevNode, dwNode, dwMemSize;
+
+    dwMemSize = 0L;
+    dwPrevNode = 0L;
+    while ((dwNode = GF1PeekDW(dwPrevNode + 0)) != 0L) {
+        dwMemSize += GF1PeekDW(dwNode + 4);
+        dwPrevNode = dwNode;
+    }
+    return dwMemSize;
+}
+
 static VOID GF1MemInit(VOID)
 {
-    ULONG dwNode, dwNextNode, dwNodeSize;
+    DWORD dwNode, dwNextNode, dwNodeSize;
 
     /* get amount of GF1 DRAM memory in bytes */
     GF1.dwMemorySize = GF1MemorySize();
+
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE) {
+        DWORD nBank, dwTopMemory;
+
+        dwNode = 0L;
+        dwNodeSize = DRAM_HEADER_SIZE;
+        dwNextNode = dwNode + dwNodeSize;
+        GF1PokeDW(dwNode + 0, dwNextNode);
+        GF1PokeDW(dwNode + 4, dwNodeSize);
+
+        /* split DRAM banks in blocks of 256KB */
+        /* WARNING: the first bank must have memory */
+        nBank = 0;
+        dwTopMemory = (GF1.aBankSize[nBank] << 10);
+        while ((dwNode = dwNextNode) != 0L) {
+            dwNextNode = (dwNode + DRAM_BANK_SIZE) & -DRAM_BANK_SIZE;
+            dwNodeSize = (dwNextNode - dwNode);
+            if (dwNextNode >= dwTopMemory) {
+                dwNodeSize = (dwTopMemory - dwNode);
+                while (++nBank < 4 && !GF1.aBankSize[nBank])
+                    continue;
+                if (nBank < 4) {
+                    dwNextNode = ((DWORD)nBank << 22);
+                    dwTopMemory = dwNextNode + (GF1.aBankSize[nBank] << 10);
+                }
+                else {
+                    dwNextNode = 0x00000L;
+                }
+            }
+            GF1PokeDW(dwNode + 0, dwNextNode);
+            GF1PokeDW(dwNode + 4, dwNodeSize);
+        }
+        return;
+    }
+#endif
 
     /* setup first DRAM memory block */
     dwNode = 0x00000L;
@@ -869,9 +1102,10 @@ static VOID GF1MemInit(VOID)
     }
 }
 
-static ULONG GF1MemAlloc(ULONG dwSize)
+
+static DWORD GF1MemAlloc(DWORD dwSize)
 {
-    ULONG dwNode, dwPrevNode, dwNodeSize;
+    DWORD dwNode, dwPrevNode, dwNodeSize;
 
     if ((dwSize += DRAM_HEADER_SIZE) != 0) {
         dwSize = (dwSize + DRAM_HEADER_SIZE - 1) & -DRAM_HEADER_SIZE;
@@ -896,21 +1130,21 @@ static ULONG GF1MemAlloc(ULONG dwSize)
     return 0L;
 }
 
-static VOID GF1MemFree(ULONG dwAddr)
+static VOID GF1MemFree(DWORD dwAddr)
 {
-    ULONG dwNode, dwNextNode, dwNodeSize;
+    DWORD dwNode, dwNextNode, dwNodeSize;
 
-    if ((dwAddr -= DRAM_HEADER_SIZE) < GF1.dwMemorySize &&
+    if ((dwAddr -= DRAM_HEADER_SIZE) < (16L << 20) &&
         GF1PeekDW(dwAddr + 0) == ~GF1PeekDW(dwAddr + 4)) {
         dwNode = 0L;
-        while (dwNode != GF1.dwMemorySize) {
+        while (dwNode != (16L << 20)) {
             if ((dwNextNode = GF1PeekDW(dwNode + 0L)) == 0L)
-                dwNextNode = GF1.dwMemorySize;
+                dwNextNode = (16L << 20);
             if (dwAddr > dwNode && dwAddr < dwNextNode)
                 break;
             dwNode = dwNextNode;
         }
-        if (dwNode != GF1.dwMemorySize) {
+        if (dwNode != (16L << 20)) {
             dwNodeSize = GF1PeekDW(dwAddr + 4L);
             if (dwAddr + dwNodeSize == dwNextNode &&
                 (dwNextNode & (DRAM_BANK_SIZE-1)) != 0L) {
@@ -933,27 +1167,15 @@ static VOID GF1MemFree(ULONG dwAddr)
     }
 }
 
-static LONG GF1MemAvail(VOID)
-{
-    ULONG dwPrevNode, dwNode, dwMemSize;
-
-    dwMemSize = 0L;
-    dwPrevNode = 0L;
-    while ((dwNode = GF1PeekDW(dwPrevNode + 0)) != 0L) {
-        dwMemSize += GF1PeekDW(dwNode + 4);
-        dwPrevNode = dwNode;
-    }
-    return dwMemSize;
-}
 
 
 /*
  * GF1 low level voice programming routines
  */
-static VOID GF1PrimeVoice(ULONG dwStart, ULONG dwLoopStart,
-    ULONG dwLoopEnd, UCHAR bControl)
+static VOID GF1PrimeVoice(DWORD dwStart, DWORD dwLoopStart,
+			  DWORD dwLoopEnd, BYTE bControl)
 {
-    ULONG dwTemp;
+    DWORD dwTemp;
 
     bControl |= (VOICE_STOPPED | VOICE_STOP);
 
@@ -974,6 +1196,12 @@ static VOID GF1PrimeVoice(ULONG dwStart, ULONG dwLoopStart,
     GF1Delay();
     GF1PortB(GF1_SET_VOICE_CTRL, bControl);
 
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        /* select InterWave local memory bank */
+        GF1PortB(IW_SUAI_WR, (dwStart >> 22) & 0x03);
+#endif
+
     GF1PortW(GF1_SET_ACCUM_HIGH, dwStart >> 7);
     GF1PortW(GF1_SET_ACCUM_LOW, dwStart << 9);
 
@@ -986,7 +1214,7 @@ static VOID GF1PrimeVoice(ULONG dwStart, ULONG dwLoopStart,
 
 static VOID GF1StartVoice(VOID)
 {
-    UCHAR bControl;
+    BYTE bControl;
 
     bControl = GF1PortRB(GF1_GET_VOICE_CTRL) & ~VOICE_ENABLE_IRQ;
     bControl &= ~(VOICE_STOPPED | VOICE_STOP);
@@ -994,11 +1222,17 @@ static VOID GF1StartVoice(VOID)
     GF1PortB(GF1_SET_VOICE_CTRL, bControl);
     GF1Delay();
     GF1PortB(GF1_SET_VOICE_CTRL, bControl);
+
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        /* activate voice */
+        GF1PortB(IW_SMSI_WR, GF1PortRB(IW_SMSI_RD) & ~IW_SMSI_VOICE_DISABLE);
+#endif
 }
 
 static VOID GF1StopVoice(VOID)
 {
-    UCHAR bControl;
+    BYTE bControl;
 
     bControl = GF1PortRB(GF1_GET_VOICE_CTRL) & ~VOICE_ENABLE_IRQ;
     bControl |= (VOICE_STOPPED | VOICE_STOP);
@@ -1006,6 +1240,13 @@ static VOID GF1StopVoice(VOID)
     GF1PortB(GF1_SET_VOICE_CTRL, bControl);
     GF1Delay();
     GF1PortB(GF1_SET_VOICE_CTRL, bControl);
+
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE) {
+        /* de-activate voice */
+        GF1PortB(IW_SMSI_WR, GF1PortRB(IW_SMSI_RD) | IW_SMSI_VOICE_DISABLE);
+    }
+#endif
 }
 
 static BOOL GF1VoiceStopped(VOID)
@@ -1013,9 +1254,9 @@ static BOOL GF1VoiceStopped(VOID)
     return (GF1PortRB(GF1_GET_VOICE_CTRL) & (VOICE_STOPPED | VOICE_STOP)) != 0;
 }
 
-static VOID GF1SetVoicePosition(ULONG dwAddr)
+static VOID GF1SetVoicePosition(DWORD dwAddr)
 {
-    UCHAR bControl;
+    BYTE bControl;
 
     bControl = GF1PortRB(GF1_GET_VOICE_CTRL) & ~VOICE_ENABLE_IRQ;
     if (bControl & VOICE_DATA_16)
@@ -1025,6 +1266,12 @@ static VOID GF1SetVoicePosition(ULONG dwAddr)
     GF1Delay();
     GF1PortB(GF1_SET_VOICE_CTRL, bControl | VOICE_STOP | VOICE_STOPPED);
 
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        /* select InterWave local memory bank */
+        GF1PortB(IW_SUAI_WR, (dwAddr >> 22) & 0x03);
+#endif
+
     GF1PortW(GF1_SET_ACCUM_HIGH, dwAddr >> 7);
     GF1PortW(GF1_SET_ACCUM_LOW, dwAddr << 9);
 
@@ -1033,13 +1280,23 @@ static VOID GF1SetVoicePosition(ULONG dwAddr)
     GF1PortB(GF1_SET_VOICE_CTRL, bControl);
 }
 
-static ULONG GF1GetVoicePosition(VOID)
+static DWORD GF1GetVoicePosition(VOID)
 {
-    ULONG dwAddr;
+    DWORD dwAddr;
+    UINT nTimeOut;
 
-    dwAddr = GF1PortRW(GF1_GET_ACCUM_HIGH);
-    dwAddr = (dwAddr << 7) & 0xFFF80L;
-    dwAddr |= (GF1PortRW(GF1_GET_ACCUM_LOW) >> 9) & 0x0007FL;
+    for (nTimeOut = 0; nTimeOut < 4; nTimeOut++) {
+        dwAddr = GF1PortRW(GF1_GET_ACCUM_HIGH);
+        dwAddr = (dwAddr << 7) & 0xFFF80L;
+        dwAddr |= (GF1PortRW(GF1_GET_ACCUM_LOW) >> 9) & 0x0007FL;
+#ifdef INTERWAVE
+        if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+            /* retrieve InterWave local memory bank */
+            dwAddr |= ((DWORD) GF1PortRB(IW_SUAI_RD) & 0x03L) << 22;
+#endif
+        if (!(((dwAddr >> 7) ^ GF1PortRW(GF1_GET_ACCUM_HIGH)) & 0x01FFFL))
+            break;
+    }
 
     return (GF1PortRB(GF1_GET_VOICE_CTRL) & VOICE_DATA_16) ?
         (GF1ConvertFrom16Bits(dwAddr) >> 1) : dwAddr;
@@ -1047,7 +1304,7 @@ static ULONG GF1GetVoicePosition(VOID)
 
 static VOID GF1SetFrequency(LONG dwFrequency)
 {
-    ULONG FC;
+    DWORD FC;
 
     FC = ((dwFrequency << 9) + (GF1.dwFreqDivisor >> 1)) / GF1.dwFreqDivisor;
     GF1PortW(GF1_SET_FREQ_CTRL, FC << 1);
@@ -1055,41 +1312,62 @@ static VOID GF1SetFrequency(LONG dwFrequency)
 
 static LONG GF1GetFrequency(VOID)
 {
-    ULONG FC;
+    DWORD FC;
 
     FC = GF1PortRW(GF1_GET_FREQ_CTRL);
     return ((FC >> 1) * GF1.dwFreqDivisor) >> 9;
 }
 
-static VOID GF1SetPanning(UCHAR nPanning)
+static VOID GF1SetPanning(BYTE nPanning)
 {
-    GF1PortB(GF1_SET_PANNING, nPanning >> 4);
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE) {
+        nPanning >>= 1;
+        /* InterWave synth right offset */
+        GF1PortW(IW_SROI_WR, aPanningTable[nPanning]);
+        /* InterWave synth left offset */
+        GF1PortW(IW_SLOI_WR, aPanningTable[0x7F - nPanning]);
+    }
+    else
+#endif
+	GF1PortB(GF1_SET_PANNING, nPanning >> 4);
 }
 
-static UCHAR GF1GetPanning(VOID)
+static BYTE GF1GetPanning(VOID)
 {
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE) {
+        WORD wPanValue, nPanning;
+        wPanValue = GF1PortRW(IW_SROI_RD);
+        for (nPanning = 0x00; nPanning < 0x7F; nPanning++) {
+            if (wPanValue <= aPanningTable[nPanning])
+                break;
+        }
+        return (nPanning << 1);
+    }
+#endif
     return GF1PortRB(GF1_GET_PANNING) << 4;
 }
 
 /*
- * static VOID GF1SetVolume(USHORT nVolume)
+ * static VOID GF1SetVolume(WORD nVolume)
  * {
  *     GF1PortW(GF1_SET_VOLUME, nVolume << 4);
  * }
  */
 
-static USHORT GF1GetVolume(VOID)
+static WORD GF1GetVolume(VOID)
 {
     return GF1PortRW(GF1_GET_VOLUME) >> 4;
 }
 
-static VOID GF1RampVolume(USHORT nStartVolume, USHORT nEndVolume,
-    UCHAR nVolumeRate, UCHAR bControl)
+static VOID GF1RampVolume(WORD nStartVolume, WORD nEndVolume,
+			  BYTE nVolumeRate, BYTE bControl)
 {
-    USHORT nBeginVolume;
+    WORD nBeginVolume;
 
     bControl &= ~(VOLUME_IRQ_PENDING | VOLUME_ROLLOVER |
-        VOLUME_STOP | VOLUME_STOPPED);
+		  VOLUME_STOP | VOLUME_STOPPED);
 
     if ((nBeginVolume = nStartVolume) > nEndVolume) {
         nStartVolume = nEndVolume;
@@ -1115,25 +1393,35 @@ static VOID GF1RampVolume(USHORT nStartVolume, USHORT nEndVolume,
 /*
  * Ultrasound GF1 driver API interface
  */
-static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI GetAudioCaps(LPAUDIOCAPS lpCaps)
 {
     static AUDIOCAPS Caps =
     {
         AUDIO_PRODUCT_GUS, "Ultrasound",
         AUDIO_FORMAT_4S16
     };
+#ifdef INTERWAVE
+    static AUDIOCAPS IWCaps =
+    {
+        AUDIO_PRODUCT_IWAVE, "Ultrasound PnP (InterWave)",
+        AUDIO_FORMAT_4S16
+    };
 
-    memcpy(pCaps, &Caps, sizeof(AUDIOCAPS));
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        memcpy(lpCaps, &IWCaps, sizeof(AUDIOCAPS));
+    else
+#endif
+	memcpy(lpCaps, &Caps, sizeof(AUDIOCAPS));
     return AUDIO_ERROR_NONE;
 }
 
 static UINT AIAPI PingAudio(VOID)
 {
-    PSZ pszUltrasnd;
+    LPSTR lpszUltrasnd;
     UINT wPort, nDramDma, nAdcDma, nIrqLine, nMidiIrqLine;
 
-    if ((pszUltrasnd = DosGetEnvironment("ULTRASND")) != NULL) {
-        if ((wPort = DosParseString(pszUltrasnd, TOKEN_HEX)) != BAD_TOKEN &&
+    if ((lpszUltrasnd = DosGetEnvironment("ULTRASND")) != NULL) {
+        if ((wPort = DosParseString(lpszUltrasnd, TOKEN_HEX)) != BAD_TOKEN &&
             (DosParseString(NULL, TOKEN_CHAR) == ',') &&
             (nDramDma = DosParseString(NULL, TOKEN_DEC)) != BAD_TOKEN &&
             (DosParseString(NULL, TOKEN_CHAR) == ',') &&
@@ -1147,13 +1435,18 @@ static UINT AIAPI PingAudio(VOID)
             GF1.nAdcDmaChannel = nAdcDma;
             GF1.nIrqLine = nIrqLine;
             GF1.nMidiIrqLine = nMidiIrqLine;
+#ifdef INTERWAVE
+            GF1.wId = AUDIO_PRODUCT_GUS;
+            if (DosGetEnvironment("INTERWAVE") != NULL)
+                GF1.wId = AUDIO_PRODUCT_IWAVE;
+#endif
             return GF1Probe();
         }
     }
     return AUDIO_ERROR_NODEVICE;
 }
 
-static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI OpenAudio(LPAUDIOINFO lpInfo)
 {
     /*
      * Initialize GF1 driver configuration structure
@@ -1161,8 +1454,8 @@ static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
      */
     if (PingAudio())
         return AUDIO_ERROR_NODEVICE;
-    pInfo->wFormat = AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO;
-    pInfo->nSampleRate = 44100;
+    lpInfo->wFormat = AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO;
+    lpInfo->nSampleRate = 44100;
 
     /*
      * Allocate an small DMA buffer for DRAM uploading
@@ -1199,6 +1492,11 @@ static UINT AIAPI CloseAudio(VOID)
     GF1EnableLineIn();
     GF1EnableMicIn();
     GF1Reset(14);
+#ifdef INTERWAVE
+    if (GF1.wId == AUDIO_PRODUCT_IWAVE)
+        /* force GF1 compatible mode */
+        GF1PortB(IW_SGMI_WR, GF1PortRB(IW_SGMI_RD) & ~IW_SGMI_ENHMODE);
+#endif
     DosSetVectorHandler(GF1.nIrqLine, NULL);
 #ifndef USEPOKE
     DosFreeChannel(GF1.nDramDmaChannel);
@@ -1207,6 +1505,11 @@ static UINT AIAPI CloseAudio(VOID)
 }
 
 static UINT AIAPI UpdateAudio(VOID)
+{
+    return AUDIO_ERROR_NONE;
+}
+
+static UINT AIAPI SetAudioMixerValue(UINT nChannel, UINT nValue)
 {
     return AUDIO_ERROR_NONE;
 }
@@ -1238,9 +1541,9 @@ static UINT AIAPI CloseVoices(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI SetAudioTimerProc(PFNAUDIOTIMER pfnAudioTimer)
+static UINT AIAPI SetAudioTimerProc(LPFNAUDIOTIMER lpfnAudioTimer)
 {
-    if ((GF1.pfnTimer2Handler = pfnAudioTimer) != NULL) {
+    if ((GF1.lpfnTimer2Handler = lpfnAudioTimer) != NULL) {
         GF1StartTimer(2);
     }
     else {
@@ -1267,45 +1570,45 @@ static LONG AIAPI GetAudioDataAvail(VOID)
     return GF1MemAvail();
 }
 
-static UINT AIAPI CreateAudioData(PAUDIOWAVE pWave)
+static UINT AIAPI CreateAudioData(LPAUDIOWAVE lpWave)
 {
-    if (pWave != NULL) {
-        if ((pWave->dwHandle = GF1MemAlloc(pWave->dwLength + 4)) != 0)
+    if (lpWave != NULL) {
+        if ((lpWave->dwHandle = GF1MemAlloc(lpWave->dwLength + 4)) != 0)
             return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_NODRAMMEMORY;
 }
 
-static UINT AIAPI DestroyAudioData(PAUDIOWAVE pWave)
+static UINT AIAPI DestroyAudioData(LPAUDIOWAVE lpWave)
 {
-    if (pWave != NULL && pWave->dwHandle != 0) {
-        GF1MemFree(pWave->dwHandle);
+    if (lpWave != NULL && lpWave->dwHandle != 0) {
+        GF1MemFree(lpWave->dwHandle);
         return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI WriteAudioData(PAUDIOWAVE pWave, ULONG dwOffset, UINT nCount)
+static UINT AIAPI WriteAudioData(LPAUDIOWAVE lpWave, DWORD dwOffset, UINT nCount)
 {
-    if (pWave != NULL && pWave->dwHandle != 0) {
-        if (dwOffset + nCount <= pWave->dwLength) {
+    if (lpWave != NULL && lpWave->dwHandle != 0) {
+        if (dwOffset + nCount <= lpWave->dwLength) {
 #ifndef USEPOKE
-            GF1UploadData(pWave->wFormat, pWave->dwHandle + dwOffset,
-                pWave->pData + dwOffset, nCount);
+            GF1UploadData(lpWave->wFormat, lpWave->dwHandle + dwOffset,
+			  lpWave->lpData + dwOffset, nCount);
 #else
-            GF1PokeBytes(pWave->dwHandle + dwOffset,
-                pWave->pData + dwOffset, nCount);
+            GF1PokeBytes(lpWave->dwHandle + dwOffset,
+			 lpWave->lpData + dwOffset, nCount);
 #endif
             /* anticlick removal workaround */
-            if (pWave->wFormat & AUDIO_FORMAT_LOOP) {
-                if (dwOffset <= pWave->dwLoopEnd &&
-                    dwOffset + nCount >= pWave->dwLoopEnd) {
-                    GF1PokeDW(pWave->dwHandle + pWave->dwLoopEnd,
-                        GF1PeekDW(pWave->dwHandle + pWave->dwLoopStart));
+            if (lpWave->wFormat & AUDIO_FORMAT_LOOP) {
+                if (dwOffset <= lpWave->dwLoopEnd &&
+                    dwOffset + nCount >= lpWave->dwLoopEnd) {
+                    GF1PokeDW(lpWave->dwHandle + lpWave->dwLoopEnd,
+			      GF1PeekDW(lpWave->dwHandle + lpWave->dwLoopStart));
                 }
             }
-            else if (dwOffset + nCount >= pWave->dwLength) {
-                GF1PokeDW(pWave->dwHandle + pWave->dwLength, 0);
+            else if (dwOffset + nCount >= lpWave->dwLength) {
+                GF1PokeDW(lpWave->dwHandle + lpWave->dwLength, 0);
             }
             return AUDIO_ERROR_NONE;
         }
@@ -1314,26 +1617,26 @@ static UINT AIAPI WriteAudioData(PAUDIOWAVE pWave, ULONG dwOffset, UINT nCount)
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI PrimeVoice(UINT nVoice, PAUDIOWAVE pWave)
+static UINT AIAPI PrimeVoice(UINT nVoice, LPAUDIOWAVE lpWave)
 {
-    ULONG dwStart, dwLoopStart, dwLoopEnd;
-    UCHAR bControl;
+    DWORD dwStart, dwLoopStart, dwLoopEnd;
+    BYTE bControl;
 
-    if (nVoice < GF1.nVoices && pWave != NULL && pWave->dwHandle != 0) {
-        dwStart = pWave->dwHandle;
+    if (nVoice < GF1.nVoices && lpWave != NULL && lpWave->dwHandle != 0) {
+        dwStart = lpWave->dwHandle;
         bControl = VOICE_STOP;
-        if (pWave->wFormat & (AUDIO_FORMAT_LOOP | AUDIO_FORMAT_BIDILOOP)) {
-            dwLoopStart = pWave->dwLoopStart;
-            dwLoopEnd = pWave->dwLoopEnd;
+        if (lpWave->wFormat & (AUDIO_FORMAT_LOOP | AUDIO_FORMAT_BIDILOOP)) {
+            dwLoopStart = lpWave->dwLoopStart;
+            dwLoopEnd = lpWave->dwLoopEnd;
             bControl |= VOICE_LOOP;
-            if (pWave->wFormat & AUDIO_FORMAT_BIDILOOP)
+            if (lpWave->wFormat & AUDIO_FORMAT_BIDILOOP)
                 bControl |= VOICE_BIDILOOP;
         }
         else {
-            dwLoopStart = dwLoopEnd = pWave->dwLength;
+            dwLoopStart = dwLoopEnd = lpWave->dwLength;
             bControl |= VOICE_NORMAL;
         }
-        if (pWave->wFormat & AUDIO_FORMAT_16BITS) {
+        if (lpWave->wFormat & AUDIO_FORMAT_16BITS) {
             dwStart >>= 1;
             dwLoopStart >>= 1;
             dwLoopEnd >>= 1;
@@ -1343,7 +1646,7 @@ static UINT AIAPI PrimeVoice(UINT nVoice, PAUDIOWAVE pWave)
         GF1.aVoiceLength[nVoice] = dwLoopEnd;
         GF1SelectVoice(nVoice);
         GF1PrimeVoice(dwStart, dwStart + dwLoopStart,
-            dwStart + dwLoopEnd, bControl);
+		      dwStart + dwLoopEnd, bControl);
         return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
@@ -1422,12 +1725,12 @@ static UINT AIAPI SetVoicePanning(UINT nVoice, UINT nPanning)
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoicePosition(UINT nVoice, PLONG pdwPosition)
+static UINT AIAPI GetVoicePosition(UINT nVoice, LPLONG lpdwPosition)
 {
     if (nVoice < GF1.nVoices) {
-        if (pdwPosition != NULL) {
+        if (lpdwPosition != NULL) {
             GF1SelectVoice(nVoice);
-            *pdwPosition = GF1GetVoicePosition() - GF1.aVoiceStart[nVoice];
+            *lpdwPosition = GF1GetVoicePosition() - GF1.aVoiceStart[nVoice];
             return AUDIO_ERROR_NONE;
         }
         return AUDIO_ERROR_INVALPARAM;
@@ -1435,12 +1738,12 @@ static UINT AIAPI GetVoicePosition(UINT nVoice, PLONG pdwPosition)
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoiceFrequency(UINT nVoice, PLONG pdwFrequency)
+static UINT AIAPI GetVoiceFrequency(UINT nVoice, LPLONG lpdwFrequency)
 {
     if (nVoice < GF1.nVoices) {
-        if (pdwFrequency != NULL) {
+        if (lpdwFrequency != NULL) {
             GF1SelectVoice(nVoice);
-            *pdwFrequency = GF1GetFrequency();
+            *lpdwFrequency = GF1GetFrequency();
             return AUDIO_ERROR_NONE;
         }
         return AUDIO_ERROR_INVALPARAM;
@@ -1448,18 +1751,18 @@ static UINT AIAPI GetVoiceFrequency(UINT nVoice, PLONG pdwFrequency)
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoiceVolume(UINT nVoice, PUINT pnVolume)
+static UINT AIAPI GetVoiceVolume(UINT nVoice, LPUINT lpnVolume)
 {
     UINT nVolume, nLogVolume;
 
     if (nVoice < GF1.nVoices) {
-        if (pnVolume != NULL) {
+        if (lpnVolume != NULL) {
             GF1SelectVoice(nVoice);
             nLogVolume = GF1GetVolume();
             for (nVolume = 0; nVolume < AUDIO_MAX_VOLUME; nVolume++)
                 if (nLogVolume <= aVolumeTable[nVolume])
                     break;
-            *pnVolume = nVolume;
+            *lpnVolume = nVolume;
             return AUDIO_ERROR_NONE;
         }
         return AUDIO_ERROR_INVALPARAM;
@@ -1467,12 +1770,12 @@ static UINT AIAPI GetVoiceVolume(UINT nVoice, PUINT pnVolume)
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoicePanning(UINT nVoice, PUINT pnPanning)
+static UINT AIAPI GetVoicePanning(UINT nVoice, LPUINT lpnPanning)
 {
     if (nVoice < GF1.nVoices) {
-        if (pnPanning != NULL) {
+        if (lpnPanning != NULL) {
             GF1SelectVoice(nVoice);
-            *pnPanning = GF1GetPanning();
+            *lpnPanning = GF1GetPanning();
             return AUDIO_ERROR_NONE;
         }
         return AUDIO_ERROR_INVALPARAM;
@@ -1480,12 +1783,12 @@ static UINT AIAPI GetVoicePanning(UINT nVoice, PUINT pnPanning)
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoiceStatus(UINT nVoice, PBOOL pnStatus)
+static UINT AIAPI GetVoiceStatus(UINT nVoice, LPBOOL lpnStatus)
 {
     if (nVoice < GF1.nVoices) {
-        if (pnStatus != NULL) {
+        if (lpnStatus != NULL) {
             GF1SelectVoice(nVoice);
-            *pnStatus = GF1VoiceStopped();
+            *lpnStatus = GF1VoiceStopped();
             return AUDIO_ERROR_NONE;
         }
         return AUDIO_ERROR_INVALPARAM;
@@ -1501,7 +1804,7 @@ AUDIOSYNTHDRIVER UltraSoundSynthDriver =
 {
     GetAudioCaps, PingAudio, OpenAudio, CloseAudio,
     UpdateAudio, OpenVoices, CloseVoices,
-    SetAudioTimerProc, SetAudioTimerRate,
+    SetAudioTimerProc, SetAudioTimerRate, SetAudioMixerValue,
     GetAudioDataAvail, CreateAudioData, DestroyAudioData,
     WriteAudioData, PrimeVoice, StartVoice, StopVoice,
     SetVoicePosition, SetVoiceFrequency, SetVoiceVolume,

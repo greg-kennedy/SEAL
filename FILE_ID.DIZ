@@ -1,4 +1,13 @@
-SEAL Audio Library Release 1.0.0
----------------------------------
-multichannel digital audio system 
-for DOS/Win95/NT/Linux platforms.
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+SEAL Audio Library Release 1.0.7
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+32-bit multichannel audio system 
+for DOS, Windows 95, Windows NT,
+OS/2, BeOS and Linux platforms.
+Supports SB, SBPro, SB16, AWE32,
+PAS, PAS16, GUS, GUSDB, GUSMAX, 
+IW, WSS, ESS and Aria cards.
+Plays MOD/MTM/S3M/XM modules.
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+Full source code available!
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=

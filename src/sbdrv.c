@@ -1,17 +1,24 @@
 /*
- * $Id: sbdrv.c 1.6 1996/05/24 14:18:19 chasan released $
+ * $Id: sbdrv.c 1.7 1996/08/05 18:51:19 chasan released $
+ *              1.8 1998/12/24 00:16:00 chasan
  *
  * Sound Blaster series DSP audio drivers.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
+#include <stdio.h>
 #include <string.h>
 #include "audio.h"
 #include "drivers.h"
 #include "msdos.h"
 
+#define DEBUG(code)
 
 /*
  * Sound Blaster DSP and Mixer register offsets
@@ -20,60 +27,60 @@
 #define MIXER_DATA              0x05    /* mixer indexed data register */
 #define DSP_RESET               0x06    /* master reset register */
 #define DSP_READ_DATA           0x0A    /* read data register */
+#define DSP_READ_READY          0x0E    /* data available register */
 #define DSP_WRITE_DATA          0x0C    /* write data register */
-#define DSP_WRITE_STATUS        0x0C    /* write status register */
-#define DSP_DATA_AVAIL          0x0E    /* data available register */
-#define DSP_ACK_DMA8            0x0E    /* 8 bit DMA acknowledge */
-#define DSP_ACK_DMA16           0x0F    /* 16 bit DMA acknowledge */
+#define DSP_WRITE_BUSY          0x0C    /* write status register */
+#define DSP_DMA_ACK_8BIT        0x0E    /* 8 bit DMA acknowledge */
+#define DSP_DMA_ACK_16BIT       0x0F    /* 16 bit DMA acknowledge */
 
 /*
- * Sound Blaster 1.0 (DSP 1.0) command defines
+ * Sound Blaster 1.0 (DSP 1.x, 2.0, 2.01, 3.xx, 4.xx) command defines
  */
-#define DSP_WRITE_SAMPLE        0x10    /* direct 8 bit output */
-#define DSP_READ_SAMPLE         0x20    /* direct 8 bit input */
-#define DSP_LS_DAC              0x14    /* 8 bit low-speed output */
-#define DSP_LS_ADC              0x24    /* 8 bit low-speed input */
-#define DSP_TIMECONST           0x40    /* transfer time constant */
-#define DSP_PAUSE_DMA           0xD0    /* halt 8 bit DMA transfer */
-#define DSP_CONTINUE_DMA        0xD4    /* continue 8 bit DMA transfer */
+#define DSP_PIO_DAC_8BIT        0x10    /* direct 8 bit output */
+#define DSP_PIO_ADC_8BIT        0x20    /* direct 8 bit input */
+#define DSP_DMA_TIME_CONST      0x40    /* transfer time constant */
+#define DSP_DMA_DAC_8BIT        0x14    /* 8 bit DMA output transfer */
+#define DSP_DMA_ADC_8BIT        0x24    /* 8 bit DMA input transfer */
+#define DSP_DMA_PAUSE_8BIT      0xD0    /* pause 8 bit DMA transfer */
+#define DSP_DMA_CONTINUE_8BIT   0xD4    /* continue 8 bit DMA transfer */
 #define DSP_SPEAKER_ON          0xD1    /* turn speaker on */
 #define DSP_SPEAKER_OFF         0xD3    /* turn speaker off */
 #define DSP_GET_VERSION         0xE1    /* get DSP version */
 
 /*
- * Sound Blaster 1.5 (DSP 2.0) command defines
+ * Sound Blaster 1.5 (DSP 2.0, 2.01, 3.xx, 4.xx) command defines
  */
-#define DSP_BLOCK_SIZE          0x48    /* transfer block size */
-#define DSP_AI_LS_DAC           0x1C    /* 8 bit low-speed A/I output */
-#define DSP_AI_LS_ADC           0x2C    /* 8 bit low-speed A/I input */
+#define DSP_DMA_BLOCK_SIZE      0x48    /* transfer block size */
+#define DSP_DMA_DAC_AI_8BIT     0x1C    /* 8 bit low-speed A/I output */
+#define DSP_DMA_ADC_AI_8BIT     0x2C    /* 8 bit low-speed A/I input */
 
 /*
- * Sound Blaster 2.0 (DSP 2.01) command defines
+ * Sound Blaster 2.0 (DSP 2.01, 3.xx) command defines
  */
-#define DSP_AI_HS_DAC           0x90    /* 8 bit high-speed A/I output */
-#define DSP_AI_HS_ADC           0x98    /* 8 bit high-speed A/I input */
-#define DSP_HS_DAC              0x91    /* 8 bit high-speed output */
-#define DSP_HS_ADC              0x99    /* 8 bit high-speed input */
+#define DSP_DMA_DAC_HS_8BIT     0x91    /* 8 bit high-speed output */
+#define DSP_DMA_ADC_HS_8BIT     0x99    /* 8 bit high-speed input */
+#define DSP_DMA_DAC_AI_HS_8BIT  0x90    /* 8 bit high-speed A/I output */
+#define DSP_DMA_ADC_AI_HS_8BIT  0x98    /* 8 bit high-speed A/I input */
 
 /*
- * Sound Blaster Pro (DSP 3.0) command defines
+ * Sound Blaster Pro (DSP 3.xx) command defines
  */
-#define DSP_ADC_STEREO          0xA8    /* 8 bit stereo input? */
-#define DSP_ADC_MONO            0xA0    /* 8 bit mono input? */
+#define DSP_DMA_ADC_MONO        0xA0    /* 8 bit mono input mode */
+#define DSP_DMA_ADC_STEREO      0xA8    /* 8 bit stereo input mode */
 
 /*
- * Sound Blaster 16 (DSP 4.0) command defines
+ * Sound Blaster 16 (DSP 4.xx) command defines
  */
-#define DSP_OUTPUT_RATE         0x41    /* set output sample rate */
-#define DSP_INPUT_RATE          0x42    /* set input sample rate */
-#define DSP_FMT_DAC16           0xB6    /* 16 bit high-speed A/I output */
-#define DSP_FMT_ADC16           0xBE    /* 16 bit high-speed A/I input */
-#define DSP_FMT_DAC8            0xC6    /* 8 bit high-speed A/I output */
-#define DSP_FMT_ADC8            0xCE    /* 8 bit high-speed A/I input */
-#define DSP_PAUSE_DMA16         0xD9    /* pause 16 bit DMA transfer */
-#define DSP_CONT_DMA16          0x47    /* continue 16 bit DMA transfer */
-#define DSP_PAUSE_DMA8          0xDA    /* pause 8 bit DMA transfer */
-#define DSP_CONT_DMA8           0x45    /* continue 8 bit DMA transfer */
+#define DSP_DMA_DAC_RATE        0x41    /* set output sample rate */
+#define DSP_DMA_ADC_RATE        0x42    /* set input sample rate */
+#define DSP_DMA_START_16BIT     0xB0    /* start 16 bit DMA transfer */
+#define DSP_DMA_START_8BIT      0xC0    /* start 8 bit DMA transfer */
+#define   B_DSP_DMA_DAC_MODE    0x06    /* start DAC output mode */
+#define   B_DSP_DMA_ADC_MODE    0x0E    /* start ADC input mode */
+#define DSP_DMA_STOP_16BIT      0xD9    /* stop 16 bit DMA transfer */
+#define DSP_DMA_STOP_8BIT       0xDA    /* stop 8 bit DMA transfer */
+#define DSP_DMA_PAUSE_16BIT     0xD5    /* pause 16 bit DMA transfer */
+#define DSP_DMA_CONTINUE_16BIT  0xD6    /* continue 16 bit DMA transfer */
 
 /*
  * Sound Blaster Pro mixer indirect registers
@@ -144,78 +151,78 @@
 #define MUTE_MICROPHONE         0x01    /* disable MIC output */
 
 /*
- * Start DMA DAC transfer format bit fields (DSP_FMT_DAC8/16)
+ * Start DMA DAC transfer format bit fields (DSP_DMA_START_8/16BIT)
  */
-#define FMT_DAC_UNSIGNED        0x00    /* select unsigned samples */
-#define FMT_DAC_SIGNED          0x10    /* select signed samples */
-#define FMT_DAC_MONO            0x00    /* select mono output */
-#define FMT_DAC_STEREO          0x20    /* select stereo output */
+#define B_DSP_DMA_UNSIGNED      0x00    /* select unsigned samples */
+#define B_DSP_DMA_SIGNED        0x10    /* select signed samples */
+#define B_DSP_DMA_MONO          0x00    /* select mono output */
+#define B_DSP_DMA_STEREO        0x20    /* select stereo output */
 
 /*
  * Timeout and DMA buffer size defines
  */
-#define TIMEOUT                 32767   /* number of times to wait for */
+#define TIMEOUT                 200000  /* number of times to wait for */
 #define BUFFERSIZE              50      /* buffer length in milliseconds */
-#define BUFFRAGSIZE             32      /* buffer fragment size in UCHARs */
+#define BUFFRAGSIZE             32      /* buffer fragment size in BYTEs */
 
 
 /*
  * Sound Blaster configuration structure
  */
 static struct {
-    USHORT  wId;                        /* audio device indentifier */
-    USHORT  wFormat;                    /* playback encoding format */
-    USHORT  nSampleRate;                /* sampling frequency */
-    USHORT  wPort;                      /* DSP base port address */
-    UCHAR   nIrqLine;                   /* interrupt line */
-    UCHAR   nDmaChannel;                /* output DMA channel */
-    UCHAR   nLowDmaChannel;             /* 8-bit DMA channel */
-    UCHAR   nHighDmaChannel;            /* 16-bit DMA channel */
-    PUCHAR  pBuffer;                    /* DMA buffer address */
+    WORD    wId;                        /* audio device indentifier */
+    WORD    wFormat;                    /* playback encoding format */
+    WORD    nSampleRate;                /* sampling frequency */
+    WORD    wPort;                      /* DSP base port address */
+    BYTE    nIrqLine;                   /* interrupt line */
+    BYTE    nDmaChannel;                /* output DMA channel */
+    BYTE    nLowDmaChannel;             /* 8-bit DMA channel */
+    BYTE    nHighDmaChannel;            /* 16-bit DMA channel */
+    LPBYTE  lpBuffer;                   /* DMA buffer address */
     UINT    nBufferSize;                /* DMA buffer length */
     UINT    nPosition;                  /* DMA buffer playing position */
-    PFNAUDIOWAVE pfnAudioWave;          /* user callback routine */
+    LPFNAUDIOWAVE lpfnAudioWave;        /* user callback routine */
 } SB;
 
 
 /*
  * Sound Blaster DSP & Mixer programming routines
  */
-static VOID DSPPortB(UCHAR bData)
+static VOID DSPPortB(BYTE bData)
 {
     UINT n;
 
     for (n = 0; n < TIMEOUT; n++)
-        if (!(INB(SB.wPort + DSP_WRITE_STATUS) & 0x80))
+        if (!(INB(SB.wPort + DSP_WRITE_BUSY) & 0x80))
             break;
     OUTB(SB.wPort + DSP_WRITE_DATA, bData);
 }
 
-static UCHAR DSPPortRB(VOID)
+static BYTE DSPPortRB(VOID)
 {
     UINT n;
 
     for (n = 0; n < TIMEOUT; n++)
-        if (INB(SB.wPort + DSP_DATA_AVAIL) & 0x80)
+        if (INB(SB.wPort + DSP_READ_READY) & 0x80)
             break;
     return INB(SB.wPort + DSP_READ_DATA);
 }
 
-static VOID DSPMixerB(UCHAR nIndex, UCHAR bData)
+static VOID DSPMixerB(BYTE nIndex, BYTE bData)
 {
     OUTB(SB.wPort + MIXER_ADDR, nIndex);
     OUTB(SB.wPort + MIXER_DATA, bData);
 }
 
-static UCHAR DSPMixerRB(UCHAR nIndex)
+static BYTE DSPMixerRB(BYTE nIndex)
 {
     OUTB(SB.wPort + MIXER_ADDR, nIndex);
     return INB(SB.wPort + MIXER_DATA);
 }
 
-static USHORT DSPGetVersion(VOID)
+static WORD DSPGetVersion(VOID)
 {
-    USHORT nMinor, nMajor;
+    WORD nMinor, nMajor;
 
     DSPPortB(DSP_GET_VERSION);
     nMajor = DSPPortRB();
@@ -228,15 +235,20 @@ static VOID DSPReset(VOID)
     UINT n;
 
     OUTB(SB.wPort + DSP_RESET, 1);
-    for (n = 0; n < 8; n++)
+
+    /* wait 3 microseconds */
+    for (n = 0; n < 32; n++)
         INB(SB.wPort + DSP_RESET);
+
     OUTB(SB.wPort + DSP_RESET, 0);
 }
 
 static BOOL DSPProbe(VOID)
 {
-    USHORT nVersion;
+    WORD nVersion;
     UINT n;
+
+    DEBUG(printf("DSPProbe: reset DSP processor\n"));
 
     /* reset the DSP device */
     for (n = 0; n < 8; n++) {
@@ -247,19 +259,29 @@ static BOOL DSPProbe(VOID)
     if (n >= 8)
         return AUDIO_ERROR_NODEVICE;
 
+    DEBUG(printf("DSPProbe: read DSP version\n"));
+
     /* get the DSP version */
     nVersion = DSPGetVersion();
+
+    DEBUG(printf("DSPProbe: DSP version 0x%03x\n", nVersion));
+
+    /* [1998/12/24] don't use anything higher than specified by the user */
     if (nVersion >= 0x400) {
-        SB.wId = AUDIO_PRODUCT_SB16;
+        if (SB.wId >= AUDIO_PRODUCT_SB16)
+            SB.wId = AUDIO_PRODUCT_SB16;
     }
     else if (nVersion >= 0x300) {
-        SB.wId = AUDIO_PRODUCT_SBPRO;
+        if (SB.wId >= AUDIO_PRODUCT_SBPRO)
+            SB.wId = AUDIO_PRODUCT_SBPRO;
     }
     else if (nVersion >= 0x201) {
-        SB.wId = AUDIO_PRODUCT_SB20;
+        if (SB.wId >= AUDIO_PRODUCT_SB20)
+            SB.wId = AUDIO_PRODUCT_SB20;
     }
     else if (nVersion >= 0x200) {
-        SB.wId = AUDIO_PRODUCT_SB15;
+        if (SB.wId >= AUDIO_PRODUCT_SB15)
+            SB.wId = AUDIO_PRODUCT_SB15;
     }
     else {
         SB.wId = AUDIO_PRODUCT_SB;
@@ -275,7 +297,7 @@ static VOID AIAPI DSPInterruptHandler(VOID)
          * autoinit DMA transfer for SB16 (DSP 4.x) cards.
          */
         INB(SB.wPort + (SB.wFormat & AUDIO_FORMAT_16BITS ?
-                DSP_ACK_DMA16 : DSP_ACK_DMA8));
+			DSP_DMA_ACK_16BIT : DSP_DMA_ACK_8BIT));
     }
     else if (SB.wId != AUDIO_PRODUCT_SB) {
         /*
@@ -283,23 +305,25 @@ static VOID AIAPI DSPInterruptHandler(VOID)
          * DMA transfer for SB Pro (DSP 3.x), SB 2.0 (DSP 2.01)
          * and SB 1.5 (DSP 2.0) cards.
          */
-        INB(SB.wPort + DSP_ACK_DMA8);
+        INB(SB.wPort + DSP_DMA_ACK_8BIT);
     }
     else {
         /*
          * Acknowledge and restart 8 bit mono low speed
          * oneshot DMA transfer for SB 1.0 (DSP 1.x) cards.
          */
-        INB(SB.wPort + DSP_ACK_DMA8);
-        DSPPortB(DSP_LS_DAC);
-        DSPPortB(0xFF);
+        INB(SB.wPort + DSP_DMA_ACK_8BIT);
+        DSPPortB(DSP_DMA_DAC_8BIT);
+        DSPPortB(0xF0);
         DSPPortB(0xFF);
     }
 }
 
 static VOID DSPStartPlayback(VOID)
 {
-    ULONG dwBytesPerSecond;
+    DWORD dwBytesPerSecond;
+
+    DEBUG(printf("DSPStartPlayback: set DMA %d and IRQ %d resources\n", SB.nDmaChannel, SB.nIrqLine));
 
     /* setup the DMA channel parameters */
     DosSetupChannel(SB.nDmaChannel, DMA_WRITE | DMA_AUTOINIT, 0);
@@ -307,16 +331,30 @@ static VOID DSPStartPlayback(VOID)
     /* setup our IRQ interrupt handler */
     DosSetVectorHandler(SB.nIrqLine, DSPInterruptHandler);
 
+    DEBUG(printf("DSPStartPlayback: reset DSP processor\n"));
+
     /* reset the DSP processor */
     DSPReset();
+
+    DEBUG(printf("DSPStartPlayback: turn on speaker\n"));
 
     /* turn on the DSP speaker */
     DSPPortB(DSP_SPEAKER_ON);
 
+    /* [1998/12/04] turn off filter and enable/disable SBPro stereo mode */
+    if (SB.wId == AUDIO_PRODUCT_SBPRO) {
+        DEBUG(printf("DSPStartPlayback: setup SBPro output control\n"));
+        DSPMixerB(MIXER_OUTPUT_CONTROL, DSPMixerRB(MIXER_OUTPUT_CONTROL) |
+		  OUTPUT_DISABLE_DNFI |
+		  (SB.wFormat & AUDIO_FORMAT_STEREO ? OUTPUT_ENABLE_VSTC : 0));
+    }
+
+    DEBUG(printf("DSPStartPlayback: set sample rate\n"));
+
     /* set DSP output playback rate */
     if (SB.wId == AUDIO_PRODUCT_SB16) {
         /* set output sample rate for SB16 cards */
-        DSPPortB(DSP_OUTPUT_RATE);
+        DSPPortB(DSP_DMA_DAC_RATE);
         DSPPortB(HIBYTE(SB.nSampleRate));
         DSPPortB(LOBYTE(SB.nSampleRate));
     }
@@ -325,9 +363,11 @@ static VOID DSPStartPlayback(VOID)
         dwBytesPerSecond = SB.nSampleRate;
         if (SB.wFormat & AUDIO_FORMAT_STEREO)
             dwBytesPerSecond <<= 1;
-        DSPPortB(DSP_TIMECONST);
-        DSPPortB(256 - (1000000L / dwBytesPerSecond));
+        DSPPortB(DSP_DMA_TIME_CONST);
+        DSPPortB((65536 - (256000000L / dwBytesPerSecond)) >> 8);
     }
+
+    DEBUG(printf("DSPStartPlayback: start playback transfer\n"));
 
     /* start DMA playback transfer */
     if (SB.wId == AUDIO_PRODUCT_SB) {
@@ -335,8 +375,8 @@ static VOID DSPStartPlayback(VOID)
          * Start 8 bit mono low speed oneshot DMA output
          * transfer for SB 1.0 (DSP 1.x) cards.
          */
-        DSPPortB(DSP_LS_DAC);
-        DSPPortB(0xFF);
+        DSPPortB(DSP_DMA_DAC_8BIT);
+        DSPPortB(0xF0);
         DSPPortB(0xFF);
     }
     else if (SB.wId == AUDIO_PRODUCT_SB15) {
@@ -344,38 +384,30 @@ static VOID DSPStartPlayback(VOID)
          * Start 8 bit mono low speed autoinit DMA output
          * transfer for SB 1.5 (DSP 2.0) cards.
          */
-        DSPPortB(DSP_BLOCK_SIZE);
+        DSPPortB(DSP_DMA_BLOCK_SIZE);
+        DSPPortB(0xF0);
         DSPPortB(0xFF);
-        DSPPortB(0xFF);
-        DSPPortB(DSP_AI_LS_DAC);
+        DSPPortB(DSP_DMA_DAC_AI_8BIT);
     }
     else if (SB.wId == AUDIO_PRODUCT_SB20) {
         /*
          * Start 8 bit mono high speed autoinit DMA transfer
          * output transfer for SB 2.0 (DSP 2.01) cards.
          */
-        DSPPortB(DSP_BLOCK_SIZE);
+        DSPPortB(DSP_DMA_BLOCK_SIZE);
+        DSPPortB(0xF0);
         DSPPortB(0xFF);
-        DSPPortB(0xFF);
-        DSPPortB(DSP_AI_HS_DAC);
+        DSPPortB(DSP_DMA_DAC_AI_HS_8BIT);
     }
     else if (SB.wId == AUDIO_PRODUCT_SBPRO) {
         /*
          * Start 8 bit mono/stereo high speed autoinit
          * DMA transfer for SB Pro (DSP 3.x) cards.
          */
-        if (SB.wFormat & AUDIO_FORMAT_STEREO) {
-            DSPMixerB(MIXER_OUTPUT_CONTROL,
-                DSPMixerRB(MIXER_OUTPUT_CONTROL) | OUTPUT_ENABLE_VSTC);
-        }
-        else {
-            DSPMixerB(MIXER_OUTPUT_CONTROL,
-                DSPMixerRB(MIXER_OUTPUT_CONTROL) & ~OUTPUT_ENABLE_VSTC);
-        }
-        DSPPortB(DSP_BLOCK_SIZE);
+        DSPPortB(DSP_DMA_BLOCK_SIZE);
+        DSPPortB(0xF0);
         DSPPortB(0xFF);
-        DSPPortB(0xFF);
-        DSPPortB(DSP_AI_HS_DAC);
+        DSPPortB(DSP_DMA_DAC_AI_HS_8BIT);
     }
     else {
         /*
@@ -383,17 +415,17 @@ static VOID DSPStartPlayback(VOID)
          * DMA transfer for SB16 (DSP 4.x) cards.
          */
         if (SB.wFormat & AUDIO_FORMAT_16BITS) {
-            DSPPortB(DSP_FMT_DAC16);
-            DSPPortB(FMT_DAC_SIGNED | (SB.wFormat & AUDIO_FORMAT_STEREO ?
-                    FMT_DAC_STEREO : FMT_DAC_MONO));
-            DSPPortB(0xFF);
+            DSPPortB(DSP_DMA_START_16BIT | B_DSP_DMA_DAC_MODE);
+            DSPPortB(B_DSP_DMA_SIGNED | (SB.wFormat & AUDIO_FORMAT_STEREO ?
+					 B_DSP_DMA_STEREO : B_DSP_DMA_MONO));
+            DSPPortB(0xF0);
             DSPPortB(0xFF);
         }
         else {
-            DSPPortB(DSP_FMT_DAC8);
-            DSPPortB(FMT_DAC_UNSIGNED | (SB.wFormat & AUDIO_FORMAT_STEREO ?
-                    FMT_DAC_STEREO : FMT_DAC_MONO));
-            DSPPortB(0xFF);
+            DSPPortB(DSP_DMA_START_8BIT | B_DSP_DMA_DAC_MODE);
+            DSPPortB(B_DSP_DMA_UNSIGNED | (SB.wFormat & AUDIO_FORMAT_STEREO ?
+					   B_DSP_DMA_STEREO : B_DSP_DMA_MONO));
+            DSPPortB(0xF0);
             DSPPortB(0xFF);
         }
     }
@@ -401,8 +433,12 @@ static VOID DSPStartPlayback(VOID)
 
 static VOID DSPStopPlayback(VOID)
 {
+    DEBUG(printf("DSPStopPlayback: reset DSP processor\n"));
+
     /* reset the DSP processor */
     DSPReset();
+
+    DEBUG(printf("DSPStopPlayback: turn off speaker\n"));
 
     /* turn off DSP speaker */
     DSPPortB(DSP_SPEAKER_OFF);
@@ -410,8 +446,10 @@ static VOID DSPStopPlayback(VOID)
     /* turn off the stereo flag for SBPro cards */
     if (SB.wId == AUDIO_PRODUCT_SBPRO) {
         DSPMixerB(MIXER_OUTPUT_CONTROL,
-            DSPMixerRB(MIXER_OUTPUT_CONTROL) & ~OUTPUT_ENABLE_VSTC);
+		  DSPMixerRB(MIXER_OUTPUT_CONTROL) & ~OUTPUT_ENABLE_VSTC);
     }
+
+    DEBUG(printf("DSPStopPlayback: restore DMA %d and IRQ %d resources\n", SB.nDmaChannel, SB.nIrqLine));
 
     /* restore the interrupt handler */
     DosSetVectorHandler(SB.nIrqLine, NULL);
@@ -427,11 +465,15 @@ static UINT DSPInitAudio(VOID)
         (nRate < nMinRate ? nMinRate :          \
         (nRate > nMaxRate ? nMaxRate : nRate))  \
 
+    DEBUG(printf("DSPInitAudio: probe SB hardware at port 0x%03x\n", SB.wPort));
+
     /*
      * Probe if there is a SB present and detect the DSP version.
      */
     if (DSPProbe())
         return AUDIO_ERROR_NODEVICE;
+
+    DEBUG(printf("DSPInitAudio: check format and sample rate\n"));
 
     /*
      * Check playback encoding format and sampling frequency
@@ -461,16 +503,21 @@ static UINT DSPInitAudio(VOID)
         SB.nSampleRate = CLIP(SB.nSampleRate, 5000, 44100);
     }
     if (SB.wId != AUDIO_PRODUCT_SB16) {
-        SB.nSampleRate = 1000000L / (1000000L / SB.nSampleRate);
+        SB.nSampleRate = (65536 - (256000000L / SB.nSampleRate)) >> 8;
+        SB.nSampleRate = 1000000L / (256 - SB.nSampleRate);
     }
     SB.nDmaChannel = (SB.wFormat & AUDIO_FORMAT_16BITS ?
-        SB.nHighDmaChannel : SB.nLowDmaChannel);
+		      SB.nHighDmaChannel : SB.nLowDmaChannel);
+
+    DEBUG(printf("DSPInitAudio: DMA channel %d selected\n", SB.nDmaChannel));
 
     return AUDIO_ERROR_NONE;
 }
 
 static VOID DSPDoneAudio(VOID)
 {
+    DEBUG(printf("DSPDoneAudio: reset DSP processor\n"));
+
     DSPReset();
 }
 
@@ -478,7 +525,7 @@ static VOID DSPDoneAudio(VOID)
 /*
  * Sound Blaster audio driver API interface
  */
-static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI GetAudioCaps(LPAUDIOCAPS lpCaps)
 {
     static AUDIOCAPS Caps =
     {
@@ -519,19 +566,19 @@ static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
 
     switch (SB.wId) {
     case AUDIO_PRODUCT_SB16:
-        memcpy(pCaps, &Caps16, sizeof(AUDIOCAPS));
+        memcpy(lpCaps, &Caps16, sizeof(AUDIOCAPS));
         break;
     case AUDIO_PRODUCT_SBPRO:
-        memcpy(pCaps, &CapsPro, sizeof(AUDIOCAPS));
+        memcpy(lpCaps, &CapsPro, sizeof(AUDIOCAPS));
         break;
     case AUDIO_PRODUCT_SB20:
-        memcpy(pCaps, &Caps20, sizeof(AUDIOCAPS));
+        memcpy(lpCaps, &Caps20, sizeof(AUDIOCAPS));
         break;
     case AUDIO_PRODUCT_SB15:
-        memcpy(pCaps, &Caps15, sizeof(AUDIOCAPS));
+        memcpy(lpCaps, &Caps15, sizeof(AUDIOCAPS));
         break;
     default:
-        memcpy(pCaps, &Caps, sizeof(AUDIOCAPS));
+        memcpy(lpCaps, &Caps, sizeof(AUDIOCAPS));
         break;
     }
     return AUDIO_ERROR_NONE;
@@ -539,16 +586,18 @@ static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
 
 static UINT AIAPI PingAudio(VOID)
 {
-    PSZ pszBlaster;
+    LPSTR lpszBlaster;
     UINT nChar;
 
-    SB.wId = AUDIO_PRODUCT_SB;
+    DEBUG(printf("SBPingAudio: fetch BLASTER variable\n"));
+
+    SB.wId = AUDIO_PRODUCT_SB16;
     SB.wPort = 0x220;
-    SB.nIrqLine = 7;
+    SB.nIrqLine = 5;
     SB.nLowDmaChannel = 1;
     SB.nHighDmaChannel = 5;
-    if ((pszBlaster = DosGetEnvironment("BLASTER")) != NULL) {
-        nChar = DosParseString(pszBlaster, TOKEN_CHAR);
+    if ((lpszBlaster = DosGetEnvironment("BLASTER")) != NULL) {
+        nChar = DosParseString(lpszBlaster, TOKEN_CHAR);
         while (nChar != 0) {
             switch (nChar) {
             case 'A':
@@ -571,7 +620,7 @@ static UINT AIAPI PingAudio(VOID)
             case 't':
                 switch (DosParseString(NULL, TOKEN_DEC)) {
                 case 1: SB.wId = AUDIO_PRODUCT_SB; break;
-                case 2: SB.wId = AUDIO_PRODUCT_SBPRO; break;
+                case 2: SB.wId = AUDIO_PRODUCT_SB15; break; /*[1998/12/24]*/
                 case 3: SB.wId = AUDIO_PRODUCT_SB20; break;
                 case 4: SB.wId = AUDIO_PRODUCT_SBPRO; break;
                 case 5: SB.wId = AUDIO_PRODUCT_SBPRO; break;
@@ -581,25 +630,32 @@ static UINT AIAPI PingAudio(VOID)
             }
             nChar = DosParseString(NULL, TOKEN_CHAR);
         }
+
+        DEBUG(printf("SBPingAudio: probe SB hardware at Port 0x%03x, IRQ %d, DMA %d/%d\n", SB.wPort, SB.nIrqLine, SB.nLowDmaChannel, SB.nHighDmaChannel));
+
         return DSPProbe();
     }
     return AUDIO_ERROR_NODEVICE;
 }
 
-static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI OpenAudio(LPAUDIOINFO lpInfo)
 {
-    ULONG dwBytesPerSecond;
+    DWORD dwBytesPerSecond;
+
+    DEBUG(printf("SBOpenAudio: initialize SB driver\n"));
 
     /*
      * Initialize the SB audio driver for playback
      */
     memset(&SB, 0, sizeof(SB));
-    SB.wFormat = pInfo->wFormat;
-    SB.nSampleRate = pInfo->nSampleRate;
+    SB.wFormat = lpInfo->wFormat;
+    SB.nSampleRate = lpInfo->nSampleRate;
     if (PingAudio())
         return AUDIO_ERROR_NODEVICE;
     if (DSPInitAudio())
         return AUDIO_ERROR_NODEVICE;
+
+    DEBUG(printf("SBOpenAudio: allocate DMA buffer\n"));
 
     /*
      * Allocate DMA channel buffer and start playback transfers
@@ -615,21 +671,26 @@ static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
         DSPDoneAudio();
         return AUDIO_ERROR_NOMEMORY;
     }
-    if ((SB.pBuffer = DosLockChannel(SB.nDmaChannel)) != NULL) {
-        memset(SB.pBuffer, SB.wFormat & AUDIO_FORMAT_16BITS ?
-            0x00 : 0x80, SB.nBufferSize);
+    if ((SB.lpBuffer = DosLockChannel(SB.nDmaChannel)) != NULL) {
+        memset(SB.lpBuffer, SB.wFormat & AUDIO_FORMAT_16BITS ?
+	       0x00 : 0x80, SB.nBufferSize);
         DosUnlockChannel(SB.nDmaChannel);
     }
+
+    DEBUG(printf("SBOpenAudio: start playback\n"));
+
     DSPStartPlayback();
 
     /* refresh caller's encoding format and sampling frequency */
-    pInfo->wFormat = SB.wFormat;
-    pInfo->nSampleRate = SB.nSampleRate;
+    lpInfo->wFormat = SB.wFormat;
+    lpInfo->nSampleRate = SB.nSampleRate;
     return AUDIO_ERROR_NONE;
 }
 
 static UINT AIAPI CloseAudio(VOID)
 {
+    DEBUG(printf("SBCloseAudio: shutdown playback and release resources\n"));
+
     /*
      * Stop DMA playback transfers and reset the DSP processor
      */
@@ -639,27 +700,36 @@ static UINT AIAPI CloseAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI UpdateAudio(VOID)
+static UINT AIAPI UpdateAudio(UINT nFrames)
 {
     int nBlockSize, nSize;
 
-    if ((SB.pBuffer = DosLockChannel(SB.nDmaChannel)) != NULL) {
+    if (SB.wFormat & AUDIO_FORMAT_16BITS) nFrames <<= 1;
+    if (SB.wFormat & AUDIO_FORMAT_STEREO) nFrames <<= 1;
+    if (nFrames <= 0 || nFrames > SB.nBufferSize)
+        nFrames = SB.nBufferSize;
+
+    if ((SB.lpBuffer = DosLockChannel(SB.nDmaChannel)) != NULL) {
         nBlockSize = SB.nBufferSize - SB.nPosition -
             DosGetChannelCount(SB.nDmaChannel);
         if (nBlockSize < 0)
             nBlockSize += SB.nBufferSize;
+
+        if (nBlockSize > nFrames)
+            nBlockSize = nFrames;
+
         nBlockSize &= -BUFFRAGSIZE;
         while (nBlockSize != 0) {
             nSize = SB.nBufferSize - SB.nPosition;
             if (nSize > nBlockSize)
                 nSize = nBlockSize;
-            if (SB.pfnAudioWave != NULL) {
-                SB.pfnAudioWave(&SB.pBuffer[SB.nPosition], nSize);
+            if (SB.lpfnAudioWave != NULL) {
+                SB.lpfnAudioWave(&SB.lpBuffer[SB.nPosition], nSize);
             }
             else {
-                memset(&SB.pBuffer[SB.nPosition],
-                    SB.wFormat & AUDIO_FORMAT_16BITS ?
-                    0x00 : 0x80, nSize);
+                memset(&SB.lpBuffer[SB.nPosition],
+		       SB.wFormat & AUDIO_FORMAT_16BITS ?
+		       0x00 : 0x80, nSize);
             }
             if ((SB.nPosition += nSize) >= SB.nBufferSize)
                 SB.nPosition -= SB.nBufferSize;
@@ -670,9 +740,9 @@ static UINT AIAPI UpdateAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI SetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+static UINT AIAPI SetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    SB.pfnAudioWave = pfnAudioWave;
+    SB.lpfnAudioWave = lpfnAudioWave;
     return AUDIO_ERROR_NONE;
 }
 

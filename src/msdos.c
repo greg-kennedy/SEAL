@@ -1,10 +1,14 @@
 /*
- * $Id: msdos.c 1.5 1996/05/24 08:30:44 chasan released $
+ * $Id: msdos.c 1.7 1996/08/15 02:33:44 chasan released $
  *
  * MS-DOS hardware programming API interface.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdlib.h>
@@ -17,58 +21,59 @@
 /*
  * MS-DOS direct memory access API routines
  */
-static UCHAR aDmaSingle[8] =
+static BYTE aDmaSingle[8] =
 {
     DMA1_SNGL, DMA1_SNGL, DMA1_SNGL, DMA1_SNGL,
     DMA2_SNGL, DMA2_SNGL, DMA2_SNGL, DMA2_SNGL
 };
 
-static UCHAR aDmaMode[8] =
+static BYTE aDmaMode[8] =
 {
     DMA1_MODE, DMA1_MODE, DMA1_MODE, DMA1_MODE,
     DMA2_MODE, DMA2_MODE, DMA2_MODE, DMA2_MODE
 };
 
-static UCHAR aDmaClear[8] =
+static BYTE aDmaClear[8] =
 {
     DMA1_CLRFF, DMA1_CLRFF, DMA1_CLRFF, DMA1_CLRFF,
     DMA2_CLRFF, DMA2_CLRFF, DMA2_CLRFF, DMA2_CLRFF
 };
 
-static UCHAR aDmaPage[8] =
+static BYTE aDmaPage[8] =
 {
     DMA0_PAGE, DMA1_PAGE, DMA2_PAGE, DMA3_PAGE,
     DMA4_PAGE, DMA5_PAGE, DMA6_PAGE, DMA7_PAGE
 };
 
-static UCHAR aDmaAddr[8] =
+static BYTE aDmaAddr[8] =
 {
     DMA0_ADDR, DMA1_ADDR, DMA2_ADDR, DMA3_ADDR,
     DMA4_ADDR, DMA5_ADDR, DMA6_ADDR, DMA7_ADDR
 };
 
-static UCHAR aDmaCount[8] =
+static BYTE aDmaCount[8] =
 {
     DMA0_CNT, DMA1_CNT, DMA2_CNT, DMA3_CNT,
     DMA4_CNT, DMA5_CNT, DMA6_CNT, DMA7_CNT
 };
 
-static ULONG aDmaLinearAddress[8] =
+static DWORD aDmaLinearAddress[8] =
 {
     0x00000, 0x00000, 0x00000, 0x00000,
     0x00000, 0x00000, 0x00000, 0x00000
 };
 
-static USHORT aDmaBufferLength[8] =
+static WORD aDmaBufferLength[8] =
 {
     0x0000, 0x0000, 0x0000, 0x0000,
     0x0000, 0x0000, 0x0000, 0x0000
 };
 
-VOID AIAPI DosSetupChannel(UINT nChannel, UCHAR nMode, USHORT nCount)
+
+VOID AIAPI DosSetupChannel(UINT nChannel, BYTE nMode, WORD nCount)
 {
-    USHORT wAddr;
-    UCHAR nPage;
+    WORD wAddr;
+    BYTE nPage;
 
     if (nChannel <= 7) {
         /* check out the count parameter */
@@ -78,12 +83,12 @@ VOID AIAPI DosSetupChannel(UINT nChannel, UCHAR nMode, USHORT nCount)
         /* get buffer physical address and length */
         if (nChannel >= 4) {
             wAddr = LOWORD(aDmaLinearAddress[nChannel] >> 1);
-            nPage = (UCHAR) HIWORD(aDmaLinearAddress[nChannel]);
+            nPage = (BYTE) HIWORD(aDmaLinearAddress[nChannel]);
             nCount >>= 1;
         }
         else {
             wAddr = LOWORD(aDmaLinearAddress[nChannel]);
-            nPage = (UCHAR) HIWORD(aDmaLinearAddress[nChannel]);
+            nPage = (BYTE) HIWORD(aDmaLinearAddress[nChannel]);
         }
         nCount--;
 
@@ -158,14 +163,14 @@ UINT AIAPI DosGetChannelCount(UINT nChannel)
 
 #ifdef __DOS16__
 
-static PVOID aDmaBufferAddr[8] =
+static LPVOID aDmaBufferAddr[8] =
 {
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-UINT AIAPI DosAllocChannel(UINT nChannel, USHORT nCount)
+UINT AIAPI DosAllocChannel(UINT nChannel, WORD nCount)
 {
-    ULONG dwAddress;
+    DWORD dwAddress;
 
     /*
      * Allocate DOS memory using standard memory allocation
@@ -173,10 +178,10 @@ UINT AIAPI DosAllocChannel(UINT nChannel, USHORT nCount)
      */
     if (nChannel <= 7 &&
         (aDmaBufferAddr[nChannel] = malloc(nCount << 1)) != NULL) {
-        dwAddress = ((ULONG) FP_SEG(aDmaBufferAddr[nChannel]) << 4) +
+        dwAddress = ((DWORD) FP_SEG(aDmaBufferAddr[nChannel]) << 4) +
             FP_OFF(aDmaBufferAddr[nChannel]);
         if ((dwAddress & 0xFFFFL) + nCount > 0x10000L)
-            dwAddress += nCount;
+            dwAddress += 0x10000L - (dwAddress & 0xFFFFL);
         aDmaLinearAddress[nChannel] = dwAddress;
         aDmaBufferLength[nChannel] = nCount;
         return 0;
@@ -192,14 +197,14 @@ VOID AIAPI DosFreeChannel(UINT nChannel)
     }
 }
 
-PVOID AIAPI DosLockChannel(UINT nChannel)
+LPVOID AIAPI DosLockChannel(UINT nChannel)
 {
-    ULONG dwAddress;
+    DWORD dwAddress;
 
     if (nChannel <= 7) {
         dwAddress = aDmaLinearAddress[nChannel];
         return MK_FP((unsigned) (dwAddress >> 4),
-            (unsigned) (dwAddress & 0x000F));
+		     (unsigned) (dwAddress & 0x000F));
     }
     return NULL;
 }
@@ -219,16 +224,16 @@ VOID AIAPI DosUnlockChannel(UINT nChannel)
 
 #if defined(__DPMI__) && !defined(__DJGPP__)
 
-static USHORT aDmaBufferSelector[8] =
+static WORD aDmaBufferSelector[8] =
 {
     0x0000, 0x0000, 0x0000, 0x0000,
     0x0000, 0x0000, 0x0000, 0x0000
 };
 
-UINT AIAPI DosAllocChannel(UINT nChannel, USHORT nCount)
+UINT AIAPI DosAllocChannel(UINT nChannel, WORD nCount)
 {
     static DOSREGS r;
-    ULONG dwAddress;
+    DWORD dwAddress;
 
     /*
      * Allocate DOS memory using a DPMI system call, works with DOS/4GW
@@ -240,9 +245,9 @@ UINT AIAPI DosAllocChannel(UINT nChannel, USHORT nCount)
         r.bx = ((nCount << 1) + 15) >> 4;
         DosIntVector(0x31, &r);
         if (!r.cflag) {
-            dwAddress = (ULONG) r.ax << 4;
+            dwAddress = (DWORD) r.ax << 4;
             if ((dwAddress & 0xFFFF) + nCount > 0x10000L)
-                dwAddress += nCount;
+                dwAddress += 0x10000L - (dwAddress & 0xFFFFL);
             aDmaBufferSelector[nChannel] = r.dx;
             aDmaLinearAddress[nChannel] = dwAddress;
             aDmaBufferLength[nChannel] = nCount;
@@ -264,12 +269,12 @@ VOID AIAPI DosFreeChannel(UINT nChannel)
     }
 }
 
-PVOID AIAPI DosLockChannel(UINT nChannel)
+LPVOID AIAPI DosLockChannel(UINT nChannel)
 {
     if (nChannel <= 7) {
 #ifdef __FLAT__
         /* TODO: This only works in DOS4GW and PMODEW extenders. */
-        return (PVOID) aDmaLinearAddress[nChannel];
+        return (LPVOID) aDmaLinearAddress[nChannel];
 #else
         return MK_FP(aDmaBufferSelector[nChannel], 0x0000);
 #endif
@@ -292,15 +297,15 @@ VOID AIAPI DosUnlockChannel(UINT nChannel)
 
 #ifdef __DJGPP__
 
-static USHORT aDmaBufferSelector[8] =
+static WORD aDmaBufferSelector[8] =
 {
     0x0000, 0x0000, 0x0000, 0x0000,
     0x0000, 0x0000, 0x0000, 0x0000
 };
 
-UINT AIAPI DosAllocChannel(UINT nChannel, USHORT nCount)
+UINT AIAPI DosAllocChannel(UINT nChannel, WORD nCount)
 {
-    ULONG dwAddress;
+    DWORD dwAddress;
     UINT nSelector;
 
     /*
@@ -311,7 +316,7 @@ UINT AIAPI DosAllocChannel(UINT nChannel, USHORT nCount)
         if (__dpmi_allocate_dos_memory(((nCount << 1) + 15) >> 4, &nSelector) != -1) {
             __dpmi_get_segment_base_address(nSelector, &dwAddress);
             if ((dwAddress & 0xFFFFL) + nCount > 0x10000L)
-                dwAddress += nCount;
+                dwAddress += 0x10000L - (dwAddress & 0xFFFFL);
             aDmaBufferSelector[nChannel] = nSelector;
             aDmaLinearAddress[nChannel] = dwAddress;
             aDmaBufferLength[nChannel] = nCount;
@@ -329,12 +334,12 @@ VOID AIAPI DosFreeChannel(UINT nChannel)
     }
 }
 
-PVOID AIAPI DosLockChannel(UINT nChannel)
+LPVOID AIAPI DosLockChannel(UINT nChannel)
 {
     if (nChannel <= 7 && ((_crt0_startup_flags & _CRT0_FLAG_NEARPTR) ||
-        __djgpp_nearptr_enable())) {
-        return (PVOID) (aDmaLinearAddress[nChannel] +
-            __djgpp_conventional_base);
+			  __djgpp_nearptr_enable())) {
+        return (LPVOID) (aDmaLinearAddress[nChannel] +
+			 __djgpp_conventional_base);
     }
     return NULL;
 }
@@ -354,31 +359,31 @@ VOID AIAPI DosUnlockChannel(UINT nChannel)
  */
 
 #ifdef __BORLANDC__
-typedef VOID __interrupt (*DOSHARDWAREVECTOR)(VOID);
+typedef VOID __interrupt (*LPFNHARDWAREVECTOR)(VOID);
 #endif
 
 #ifdef __WATCOMC__
-typedef VOID (__interrupt* DOSHARDWAREVECTOR)(VOID);
+typedef VOID (__interrupt* LPFNHARDWAREVECTOR)(VOID);
 #endif
 
 #ifdef __DJGPP__
-typedef _go32_dpmi_seginfo DOSHARDWAREVECTOR;
+typedef _go32_dpmi_seginfo LPFNHARDWAREVECTOR;
 #define __interrupt
 #endif
 
-static UCHAR aIrqSlotNumber[16] =
+static BYTE aIrqSlotNumber[16] =
 {
     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
     0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77
 };
 
-static DOSUSERVECTOR aUserVector[16] =
+static LPFNUSERVECTOR aUserVector[16] =
 {
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-static DOSHARDWAREVECTOR aHardwareVector[16];
+static LPFNHARDWAREVECTOR aHardwareVector[16];
 
 
 static VOID MasterWrapVector(UINT nIrqLine)
@@ -394,26 +399,26 @@ static VOID MasterWrapVector(UINT nIrqLine)
 static VOID __interrupt name (VOID) { MasterWrapVector(num); }
 
 WRAPVECTOR(Wrap0Vector, 0x00)
-WRAPVECTOR(Wrap1Vector, 0x01)
-WRAPVECTOR(Wrap2Vector, 0x02)
-WRAPVECTOR(Wrap3Vector, 0x03)
-WRAPVECTOR(Wrap4Vector, 0x04)
-WRAPVECTOR(Wrap5Vector, 0x05)
-WRAPVECTOR(Wrap6Vector, 0x06)
-WRAPVECTOR(Wrap7Vector, 0x07)
-WRAPVECTOR(Wrap8Vector, 0x08)
-WRAPVECTOR(Wrap9Vector, 0x09)
-WRAPVECTOR(WrapAVector, 0x0A)
-WRAPVECTOR(WrapBVector, 0x0B)
-WRAPVECTOR(WrapCVector, 0x0C)
-WRAPVECTOR(WrapDVector, 0x0D)
-WRAPVECTOR(WrapEVector, 0x0E)
-WRAPVECTOR(WrapFVector, 0x0F)
+    WRAPVECTOR(Wrap1Vector, 0x01)
+    WRAPVECTOR(Wrap2Vector, 0x02)
+    WRAPVECTOR(Wrap3Vector, 0x03)
+    WRAPVECTOR(Wrap4Vector, 0x04)
+    WRAPVECTOR(Wrap5Vector, 0x05)
+    WRAPVECTOR(Wrap6Vector, 0x06)
+    WRAPVECTOR(Wrap7Vector, 0x07)
+    WRAPVECTOR(Wrap8Vector, 0x08)
+    WRAPVECTOR(Wrap9Vector, 0x09)
+    WRAPVECTOR(WrapAVector, 0x0A)
+    WRAPVECTOR(WrapBVector, 0x0B)
+    WRAPVECTOR(WrapCVector, 0x0C)
+    WRAPVECTOR(WrapDVector, 0x0D)
+    WRAPVECTOR(WrapEVector, 0x0E)
+    WRAPVECTOR(WrapFVector, 0x0F)
 
 #ifdef __DJGPP__
-static DOSUSERVECTOR aWrapVector[16] =
+    static LPFNUSERVECTOR aWrapVector[16] =
 #else
-static DOSHARDWAREVECTOR aWrapVector[16] =
+static LPFNHARDWAREVECTOR aWrapVector[16] =
 #endif
 {
     Wrap0Vector, Wrap1Vector, Wrap2Vector, Wrap3Vector,
@@ -425,41 +430,43 @@ static DOSHARDWAREVECTOR aWrapVector[16] =
 
 VOID AIAPI DosEnableVectorHandler(UINT nIrqLine)
 {
-    USHORT nIrqMask;
+    WORD wIrqMask;
 
     if (nIrqLine <= 15) {
-        nIrqMask = MAKEWORD(INB(0x21), INB(0xA1)) & ~(1 << nIrqLine);
-        OUTB(0x21, LOBYTE(nIrqMask));
-        OUTB(0xA1, HIBYTE(nIrqMask));
+        if (nIrqLine == 2) nIrqLine = 9;
+        wIrqMask = MAKEWORD(INB(0x21), INB(0xA1)) & ~(1 << nIrqLine);
+        OUTB(0x21, LOBYTE(wIrqMask));
+        OUTB(0xA1, HIBYTE(wIrqMask));
     }
 }
 
 VOID AIAPI DosDisableVectorHandler(UINT nIrqLine)
 {
-    USHORT nIrqMask;
+    WORD wIrqMask;
 
     if (nIrqLine <= 15) {
-        nIrqMask = MAKEWORD(INB(0x21), INB(0xA1)) | (1 << nIrqLine);
-        OUTB(0x21, LOBYTE(nIrqMask));
-        OUTB(0xA1, HIBYTE(nIrqMask));
+        if (nIrqLine == 2) nIrqLine = 9;
+        wIrqMask = MAKEWORD(INB(0x21), INB(0xA1)) | (1 << nIrqLine);
+        OUTB(0x21, LOBYTE(wIrqMask));
+        OUTB(0xA1, HIBYTE(wIrqMask));
     }
 }
 
-VOID AIAPI DosSetVectorHandler(UINT nIrqLine, DOSUSERVECTOR pfnUserVector)
+VOID AIAPI DosSetVectorHandler(UINT nIrqLine, LPFNUSERVECTOR lpfnUserVector)
 {
 #ifdef __DJGPP__
     _go32_dpmi_seginfo wrapper;
-
 #endif
     UINT nIntr;
 
     if (nIrqLine <= 15) {
+        if (nIrqLine == 2) nIrqLine = 9;
         nIntr = aIrqSlotNumber[nIrqLine];
-        if (pfnUserVector != NULL) {
+        if (lpfnUserVector != NULL) {
             if (!aUserVector[nIrqLine]) {
 #ifdef __DJGPP__
                 _go32_dpmi_get_protected_mode_interrupt_vector(nIntr, &aHardwareVector[nIrqLine]);
-                wrapper.pm_offset = (ULONG) aWrapVector[nIrqLine];
+                wrapper.pm_offset = (DWORD) aWrapVector[nIrqLine];
                 wrapper.pm_selector = _go32_my_cs();
                 _go32_dpmi_allocate_iret_wrapper(&wrapper);
                 _go32_dpmi_set_protected_mode_interrupt_vector(nIntr, &wrapper);
@@ -482,71 +489,72 @@ VOID AIAPI DosSetVectorHandler(UINT nIrqLine, DOSUSERVECTOR pfnUserVector)
 #endif
             }
         }
-        aUserVector[nIrqLine] = pfnUserVector;
+        aUserVector[nIrqLine] = lpfnUserVector;
     }
 }
 
-VOID AIAPI DosIntVector(UINT nIntr, PDOSREGS pRegs)
+VOID AIAPI DosIntVector(UINT nIntr, LPDOSREGS lpRegs)
 {
     static union REGS r;
 
     memset(&r, 0, sizeof(r));
 #ifdef __FLAT__
-    r.w.ax = pRegs->ax;
-    r.w.bx = pRegs->bx;
-    r.w.cx = pRegs->cx;
-    r.w.dx = pRegs->dx;
-    r.w.si = pRegs->si;
-    r.w.di = pRegs->di;
+    r.w.ax = lpRegs->ax;
+    r.w.bx = lpRegs->bx;
+    r.w.cx = lpRegs->cx;
+    r.w.dx = lpRegs->dx;
+    r.w.si = lpRegs->si;
+    r.w.di = lpRegs->di;
     int386(nIntr, &r, &r);
-    pRegs->ax = r.w.ax;
-    pRegs->bx = r.w.bx;
-    pRegs->cx = r.w.cx;
-    pRegs->dx = r.w.dx;
-    pRegs->si = r.w.si;
-    pRegs->di = r.w.di;
-    pRegs->cflag = r.x.cflag;
+    lpRegs->ax = r.w.ax;
+    lpRegs->bx = r.w.bx;
+    lpRegs->cx = r.w.cx;
+    lpRegs->dx = r.w.dx;
+    lpRegs->si = r.w.si;
+    lpRegs->di = r.w.di;
+    lpRegs->cflag = r.x.cflag;
 #else
-    r.x.ax = pRegs->ax;
-    r.x.bx = pRegs->bx;
-    r.x.cx = pRegs->cx;
-    r.x.dx = pRegs->dx;
-    r.x.si = pRegs->si;
-    r.x.di = pRegs->di;
+    r.x.ax = lpRegs->ax;
+    r.x.bx = lpRegs->bx;
+    r.x.cx = lpRegs->cx;
+    r.x.dx = lpRegs->dx;
+    r.x.si = lpRegs->si;
+    r.x.di = lpRegs->di;
     int86(nIntr, &r, &r);
-    pRegs->ax = r.x.ax;
-    pRegs->bx = r.x.bx;
-    pRegs->cx = r.x.cx;
-    pRegs->dx = r.x.dx;
-    pRegs->si = r.x.si;
-    pRegs->di = r.x.di;
-    pRegs->cflag = r.x.cflag;
+    lpRegs->ax = r.x.ax;
+    lpRegs->bx = r.x.bx;
+    lpRegs->cx = r.x.cx;
+    lpRegs->dx = r.x.dx;
+    lpRegs->si = r.x.si;
+    lpRegs->di = r.x.di;
+    lpRegs->cflag = r.x.cflag;
 #endif
 }
 
 
-PSZ AIAPI DosGetEnvironment(PSZ pszKeyName)
+LPSTR AIAPI DosGetEnvironment(LPSTR lpszKeyName)
 {
-    return getenv(pszKeyName);
+    return getenv(lpszKeyName);
 }
 
-UINT AIAPI DosParseString(PSZ pszText, UINT nToken)
+UINT AIAPI DosParseString(LPSTR lpszText, UINT nToken)
 {
-    static PSZ pszString = NULL;
+    static LPSTR lpszString = NULL;
 
-    if (pszText != NULL)
-        pszString = pszText;
+    if (lpszText != NULL)
+        lpszString = lpszText;
 
-    if (pszString != NULL) {
-       if (nToken == TOKEN_CHAR) {
-           return *pszString++;
-       }
-       if (nToken == TOKEN_DEC) {
-           return strtol(pszString, &pszString, 10);
-       }
-       if (nToken == TOKEN_HEX) {
-           return strtol(pszString, &pszString, 0x10);
-       }
+    if (lpszString != NULL) {
+	if (nToken == TOKEN_CHAR) {
+	    return *lpszString++;
+	}
+	if (nToken == TOKEN_DEC) {
+	    return strtol(lpszString, &lpszString, 10);
+	}
+	if (nToken == TOKEN_HEX) {
+	    return strtol(lpszString, &lpszString, 0x10);
+	}
     }
     return BAD_TOKEN;
 }
+

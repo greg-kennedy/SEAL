@@ -1,10 +1,14 @@
 /*
- * $Id: pasdrv.c 1.4 1996/05/24 08:30:44 chasan released $
+ * $Id: pasdrv.c 1.5 1996/08/05 18:51:19 chasan released $
  *
  * Pro Audio Spectrum series audio driver.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <string.h>
@@ -182,37 +186,37 @@
  * Pro Audio Spectrum configuration structure
  */
 static struct {
-    USHORT  wFormat;                    /* playback encoding format */
-    USHORT  nSampleRate;                /* sampling frequency */
-    USHORT  wId;                        /* audio device identifier */
-    USHORT  wProduct;                   /* product feature bits */
-    USHORT  wPort;                      /* device base port */
-    UCHAR   nIrqLine;                   /* interrupt line */
-    UCHAR   nDmaChannel;                /* output DMA channel */
-    PUCHAR  pBuffer;                    /* DMA buffer address */
+    WORD    wFormat;                    /* playback encoding format */
+    WORD    nSampleRate;                /* sampling frequency */
+    WORD    wId;                        /* audio device identifier */
+    WORD    wProduct;                   /* product feature bits */
+    WORD    wPort;                      /* device base port */
+    BYTE    nIrqLine;                   /* interrupt line */
+    BYTE    nDmaChannel;                /* output DMA channel */
+    LPBYTE  lpBuffer;                   /* DMA buffer address */
     UINT    nBufferSize;                /* DMA buffer length */
     UINT    nPosition;                  /* DMA buffer playing position */
-    PFNAUDIOWAVE pfnAudioWave;          /* user callback routine */
+    LPFNAUDIOWAVE lpfnAudioWave;        /* user callback routine */
 } PAS;
 
 
 /*
  * Pro Audio Spectrum low level routines
  */
-static VOID PASPortB(USHORT nIndex, UCHAR bData)
+static VOID PASPortB(WORD nIndex, BYTE bData)
 {
     OUTB(PAS.wPort ^ nIndex, bData);
 }
 
-static UCHAR PASPortRB(USHORT nIndex)
+static BYTE PASPortRB(WORD nIndex)
 {
     return INB(PAS.wPort ^ nIndex);
 }
 
 static UINT PASProbe(VOID)
 {
-    ULONG dwSampleRate;
-    UCHAR nRevId, mmrd, smrd;
+    DWORD dwSampleRate;
+    BYTE nRevId, mmrd, smrd;
 
     /*
      * Probe PAS hardware checking the revision ID code from
@@ -246,7 +250,7 @@ static UINT PASProbe(VOID)
             PAS.wProduct |= MVSLAVE;
 
         /* merge in the chip revision level */
-        PAS.wProduct |= (USHORT)(PASPortRB(PAS_MASTERCHIPR) & 0x0F) << 11;
+        PAS.wProduct |= (WORD)(PASPortRB(PAS_MASTERCHIPR) & 0x0F) << 11;
 
         /* determine CDROM type, FM chip, 8/16 bit DAC, and mixer */
         smrd = PASPortRB(PAS_SLAVEMODRD);
@@ -297,7 +301,7 @@ static UINT PASProbe(VOID)
 
 static VOID PASStartPlayback(VOID)
 {
-    ULONG nCount;
+    DWORD nCount;
 
     /*
      * Setup the DMA controller channel for playback in
@@ -358,7 +362,7 @@ static VOID PASStartPlayback(VOID)
      */
     if (PAS.wProduct & MV101) {
         PASPortB(PAS_SYSCONFIG2, (PASPortRB(PAS_SYSCONFIG2) & ~SC2_16BIT) |
-            (PAS.wFormat & AUDIO_FORMAT_16BITS ? SC2_16BIT : 0x00));
+		 (PAS.wFormat & AUDIO_FORMAT_16BITS ? SC2_16BIT : 0x00));
     }
 
     /*
@@ -366,7 +370,7 @@ static VOID PASStartPlayback(VOID)
      * (DMA enable, disable PCM, DAC mode, L->L and R->R connections).
      */
     PASPortB(PAS_CROSSCHANNEL, CC_DRQ | CC_DAC | CC_L2L | CC_R2R |
-        (PAS.wFormat & AUDIO_FORMAT_STEREO ? CC_STEREO : CC_MONO));
+	     (PAS.wFormat & AUDIO_FORMAT_STEREO ? CC_STEREO : CC_MONO));
 
     /* enable PCM state machine */
     PASPortB(PAS_CROSSCHANNEL, PASPortRB(PAS_CROSSCHANNEL) | CC_ENAPCM);
@@ -398,7 +402,7 @@ static VOID PASStopPlayback(VOID)
     DosDisableChannel(PAS.nDmaChannel);
 }
 
-static UINT PASPing(USHORT wPort)
+static UINT PASPing(WORD wPort)
 {
     static DOSREGS r;
 
@@ -431,7 +435,7 @@ static UINT PASPing(USHORT wPort)
 /*
  * Pro Audio Spectrum driver API interface
  */
-static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI GetAudioCaps(LPAUDIOCAPS lpCaps)
 {
     static AUDIOCAPS Caps =
     {
@@ -451,8 +455,8 @@ static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
         AUDIO_FORMAT_4M16 | AUDIO_FORMAT_4S16
     };
 
-    memcpy(pCaps, PAS.wId != AUDIO_PRODUCT_PAS16 ?
-        &Caps : &Caps16, sizeof(AUDIOCAPS));
+    memcpy(lpCaps, PAS.wId != AUDIO_PRODUCT_PAS16 ?
+	   &Caps : &Caps16, sizeof(AUDIOCAPS));
     return AUDIO_ERROR_NONE;
 }
 
@@ -469,9 +473,9 @@ static UINT AIAPI PingAudio(VOID)
     return AUDIO_ERROR_NODEVICE;
 }
 
-static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI OpenAudio(LPAUDIOINFO lpInfo)
 {
-    ULONG dwBytesPerSecond;
+    DWORD dwBytesPerSecond;
 
     memset(&PAS, 0, sizeof(PAS));
 
@@ -479,14 +483,14 @@ static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
      * Initialize PAS16 configuration parameters
      * and check whether we have such a card.
      */
-    PAS.wFormat = pInfo->wFormat;
-    PAS.nSampleRate = pInfo->nSampleRate;
+    PAS.wFormat = lpInfo->wFormat;
+    PAS.nSampleRate = lpInfo->nSampleRate;
     if (PingAudio())
         return AUDIO_ERROR_NODEVICE;
 
     /* refresh configuration parameters */
-    pInfo->wFormat = PAS.wFormat;
-    pInfo->nSampleRate = PAS.nSampleRate;
+    lpInfo->wFormat = PAS.wFormat;
+    lpInfo->nSampleRate = PAS.nSampleRate;
 
     /*
      * Allocate and clean DMA channel buffer for playback
@@ -500,9 +504,9 @@ static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
     PAS.nBufferSize = (PAS.nBufferSize + BUFFRAGSIZE) & -BUFFRAGSIZE;
     if (DosAllocChannel(PAS.nDmaChannel, PAS.nBufferSize))
         return AUDIO_ERROR_NOMEMORY;
-    if ((PAS.pBuffer = DosLockChannel(PAS.nDmaChannel)) != NULL) {
-        memset(PAS.pBuffer, PAS.wFormat & AUDIO_FORMAT_16BITS ?
-            0x00 : 0x80, PAS.nBufferSize);
+    if ((PAS.lpBuffer = DosLockChannel(PAS.nDmaChannel)) != NULL) {
+        memset(PAS.lpBuffer, PAS.wFormat & AUDIO_FORMAT_16BITS ?
+	       0x00 : 0x80, PAS.nBufferSize);
         DosUnlockChannel(PAS.nDmaChannel);
     }
 
@@ -519,27 +523,36 @@ static UINT AIAPI CloseAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI UpdateAudio(VOID)
+static UINT AIAPI UpdateAudio(UINT nFrames)
 {
     int nBlockSize, nSize;
 
-    if ((PAS.pBuffer = DosLockChannel(PAS.nDmaChannel)) != NULL) {
+    if (PAS.wFormat & AUDIO_FORMAT_16BITS) nFrames <<= 1;
+    if (PAS.wFormat & AUDIO_FORMAT_STEREO) nFrames <<= 1;
+    if (nFrames <= 0 || nFrames > PAS.nBufferSize)
+        nFrames = PAS.nBufferSize;
+
+    if ((PAS.lpBuffer = DosLockChannel(PAS.nDmaChannel)) != NULL) {
         nBlockSize = PAS.nBufferSize - PAS.nPosition -
             DosGetChannelCount(PAS.nDmaChannel);
         if (nBlockSize < 0)
             nBlockSize += PAS.nBufferSize;
+
+        if (nBlockSize > nFrames)
+            nBlockSize = nFrames;
+
         nBlockSize &= -BUFFRAGSIZE;
         while (nBlockSize != 0) {
             nSize = PAS.nBufferSize - PAS.nPosition;
             if (nSize > nBlockSize)
                 nSize = nBlockSize;
-            if (PAS.pfnAudioWave != NULL) {
-                PAS.pfnAudioWave(&PAS.pBuffer[PAS.nPosition], nSize);
+            if (PAS.lpfnAudioWave != NULL) {
+                PAS.lpfnAudioWave(&PAS.lpBuffer[PAS.nPosition], nSize);
             }
             else {
-                memset(&PAS.pBuffer[PAS.nPosition],
-                    PAS.wFormat & AUDIO_FORMAT_16BITS ?
-                    0x00 : 0x80, nSize);
+                memset(&PAS.lpBuffer[PAS.nPosition],
+		       PAS.wFormat & AUDIO_FORMAT_16BITS ?
+		       0x00 : 0x80, nSize);
             }
             if ((PAS.nPosition += nSize) >= PAS.nBufferSize)
                 PAS.nPosition -= PAS.nBufferSize;
@@ -550,9 +563,9 @@ static UINT AIAPI UpdateAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static UINT AIAPI SetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+static UINT AIAPI SetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    PAS.pfnAudioWave = pfnAudioWave;
+    PAS.lpfnAudioWave = lpfnAudioWave;
     return AUDIO_ERROR_NONE;
 }
 

@@ -1,10 +1,14 @@
 /*
- * $Id: msdos.h 1.4 1996/05/24 08:30:44 chasan released $
+ * $Id: msdos.h 1.5 1996/08/05 18:51:19 chasan released $
  *
  * MS-DOS hardware programming API interface.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #ifndef __MSDOS_H
@@ -125,17 +129,17 @@ extern "C" {
 /*
  * PIC hardware interrupt callback routine
  */
-typedef VOID (AIAPI* DOSUSERVECTOR)(VOID);
+    typedef VOID (AIAPI* LPFNUSERVECTOR)(VOID);
 
-typedef struct {
-    USHORT  ax;
-    USHORT  bx;
-    USHORT  cx;
-    USHORT  dx;
-    USHORT  si;
-    USHORT  di;
-    USHORT  cflag;
-} DOSREGS, *PDOSREGS;
+    typedef struct {
+	WORD    ax;
+	WORD    bx;
+	WORD    cx;
+	WORD    dx;
+	WORD    si;
+	WORD    di;
+	WORD    cflag;
+    } DOSREGS, *LPDOSREGS;
 
 
 /*
@@ -150,23 +154,23 @@ typedef struct {
 /*
  * MS-DOS hardware programming API interface
  */
-VOID AIAPI DosSetVectorHandler(UINT nIrqLine, DOSUSERVECTOR pfnUserVector);
-VOID AIAPI DosEnableVectorHandler(UINT nIrqLine);
-VOID AIAPI DosDisableVectorHandler(UINT nIrqLine);
+    VOID AIAPI DosSetVectorHandler(UINT nIrqLine, LPFNUSERVECTOR lpfnUserVector);
+    VOID AIAPI DosEnableVectorHandler(UINT nIrqLine);
+    VOID AIAPI DosDisableVectorHandler(UINT nIrqLine);
 
-VOID AIAPI DosSetupChannel(UINT nChannel, UCHAR nMode, USHORT nCount);
-VOID AIAPI DosDisableChannel(UINT nChannel);
-VOID AIAPI DosEnableChannel(UINT nChannel);
-UINT AIAPI DosGetChannelCount(UINT nChannel);
-UINT AIAPI DosAllocChannel(UINT nChannel, USHORT nCount);
-VOID AIAPI DosFreeChannel(UINT nChannel);
-PVOID AIAPI DosLockChannel(UINT nChannel);
-VOID AIAPI DosUnlockChannel(UINT nChannel);
+    VOID AIAPI DosSetupChannel(UINT nChannel, BYTE nMode, WORD nCount);
+    VOID AIAPI DosDisableChannel(UINT nChannel);
+    VOID AIAPI DosEnableChannel(UINT nChannel);
+    UINT AIAPI DosGetChannelCount(UINT nChannel);
+    UINT AIAPI DosAllocChannel(UINT nChannel, WORD nCount);
+    VOID AIAPI DosFreeChannel(UINT nChannel);
+    LPVOID AIAPI DosLockChannel(UINT nChannel);
+    VOID AIAPI DosUnlockChannel(UINT nChannel);
 
-VOID AIAPI DosIntVector(UINT nIntr, PDOSREGS pRegs);
+    VOID AIAPI DosIntVector(UINT nIntr, LPDOSREGS lpRegs);
 
-PSZ  AIAPI DosGetEnvironment(PSZ pszKeyName);
-UINT AIAPI DosParseString(PSZ pszText, UINT nToken);
+    LPSTR AIAPI DosGetEnvironment(LPSTR lpszKeyName);
+    UINT AIAPI DosParseString(LPSTR lpszText, UINT nToken);
 
 #ifdef __cplusplus
 };

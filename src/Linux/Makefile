@@ -4,22 +4,13 @@ CC = gcc
 AR = ar
 RANLIB = ranlib
 STRIP = strip
-CFLAGS = -c -Wall -O2 -fomit-frame-pointer -D__LINUX__ -D__ASM__
-LFLAGS = -L. -laudio
+CFLAGS = -c -Wall -mpentium -O3 -D__LINUX__ -D__ASM__
+LFLAGS = -L../lib/Linux -laudio
 
-OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o iofile.o \
-	modeng.o nondrv.o mixdrv.o _mixdrv.o lnxdrv.o
+OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o mtmfile.o \
+	iofile.o modeng.o nondrv.o mixdrv.o lnxdrv.o _mixdrv.o
 
-ifeq ($(TARGET),static)
-LIB = libaudio.a
-else
-CFLAGS += -fPIC
-LIBNAME = libaudio.so
-LIBMAJOR = 1
-LIBMINOR = 0
-LIBPATCH = 0
-LIB = $(LIBNAME).$(LIBMAJOR).$(LIBMINOR).$(LIBPATCH)
-endif
+LIB = ../lib/Linux/libaudio.a
 
 all : mp clean
 	@echo done.
@@ -28,15 +19,9 @@ mp : mp.o $(LIB)
 	$(CC) -o mp mp.o $(LFLAGS)
 	$(STRIP) mp
 
-ifeq ($(TARGET),static)
 $(LIB) : $(OBJS)
 	$(AR) rc $(LIB) $(OBJS)
 	$(RANLIB) $(LIB)
-else
-$(LIB) : $(OBJS)
-	$(CC) -shared -Wl,-soname,$(LIBNAME).$(LIBMAJOR) -o $(LIB) $(OBJS)
-	ln -sf $(LIB) $(LIBNAME).$(LIBMAJOR)
-endif
 
 .c.o:
 	$(CC) $(CFLAGS) $<
@@ -45,4 +30,4 @@ endif
 	$(CC) $(CFLAGS) $<
 
 clean :
-	@for f in *.o; do rm -f $$f; done
+	@rm -rf *.o

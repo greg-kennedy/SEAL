@@ -1,11 +1,11 @@
-/* example2.c - initialize and print device information */
+/* example2.c - play a module file */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <audio.h>
 
-#if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__) || defined(__DJGPP__)
+#if defined(_MSC_VER) || defined(__WATCOMC__) || defined(__BORLANDC__) || defined(__DJGPP__)
 #include <conio.h>
 #else
 #define kbhit() 0
@@ -14,7 +14,7 @@
 int main(void)
 {
     AUDIOINFO info;
-    AUDIOCAPS caps;
+    LPAUDIOMODULE lpModule;
 
     /* initialize audio library */
     AInitialize();
@@ -23,25 +23,40 @@ int main(void)
     info.nDeviceId = AUDIO_DEVICE_MAPPER;
     info.wFormat = AUDIO_FORMAT_16BITS | AUDIO_FORMAT_STEREO;
     info.nSampleRate = 44100;
+
+#ifdef USEFILTER
+    /* enable antialias dynamic filtering */
+    info.wFormat |= AUDIO_FORMAT_FILTER;
+#endif
+
     AOpenAudio(&info);
 
-    /* print information */
-    AGetAudioDevCaps(info.nDeviceId, &caps);
-    printf("%s at %d-bit %s %u Hz detected\n",
-        caps.szProductName,
-        info.wFormat & AUDIO_FORMAT_16BITS ? 16 : 8,
-        info.wFormat & AUDIO_FORMAT_STEREO ? "stereo" : "mono",
-        info.nSampleRate);
+    /* load module file */
+    ALoadModuleFile("test.s3m", &lpModule, 0);
+
+    /* open voices and play module */
+    AOpenVoices(lpModule->nTracks);
+    APlayModule(lpModule);
 
     /* program main execution loop */
+    printf("Playing module file, press any key to stop.\n");
     while (!kbhit()) {
+        BOOL stopped;
+
+        /* check if the module is stopped */
+        AGetModuleStatus(&stopped);
+        if (stopped) break;
+
         /* update audio system */
         AUpdateAudio();
-        /* ...
-         * put your own stuff here 
-         * ...
-         */
     }
+
+    /* stop module and close voices */
+    AStopModule();
+    ACloseVoices();
+
+    /* release module file */
+    AFreeModuleFile(lpModule);
 
     /* close audio device */
     ACloseAudio();

@@ -1,20 +1,25 @@
 {*
- * $Id: audio.h 1.12 1996/06/02 17:02:07 chasan released $
+ * $Id: audio.h 1.16 1996/09/25 13:09:09 chasan released $
  *
  * SEAL Synthetic Audio Library API Interface
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *}
 
 unit Audio;
 
 interface
-uses Windows;
+uses
+  SysUtils, Windows;
 
 const
   { audio system version number }
-  AUDIO_SYSTEM_VERSION          = $0100;
+  AUDIO_SYSTEM_VERSION          = $0101;
 
   { audio capabilities bit fields definitions }
   AUDIO_FORMAT_1M08             = $00000001;
@@ -99,6 +104,7 @@ const
   AUDIO_PRODUCT_LINUX           = $0101;
   AUDIO_PRODUCT_SPARC           = $0102;
   AUDIO_PRODUCT_SGI             = $0103;
+  AUDIO_PRODUCT_DSOUND          = $0104;
 
   { audio envelope bit fields }
   AUDIO_ENVELOPE_ON             = $0001;
@@ -225,6 +231,7 @@ type
   { audio callback function defines }
   TAudioWaveProc = procedure (pData: Pointer; nCount: Integer); stdcall;
   TAudioTimerProc = procedure; stdcall;
+  TAudioCallback = procedure(nSyncMark: Byte; nOrder, nRow: Integer); stdcall;
 
   { audio handle defines }
   PHAC = ^HAC;
@@ -271,7 +278,7 @@ function ASetVoicePanning(hVoice: HAC; nPanning: Integer): Integer; stdcall;
 function AGetVoicePosition(hVoice: HAC; var pdwPosition: Longint): Integer; stdcall;
 function AGetVoiceFrequency(hVoice: HAC; var pdwFrequency: Longint): Integer; stdcall;
 function AGetVoiceVolume(hVoice: HAC; var pnVolume: Integer): Integer; stdcall;
-function AGetVoicePanning(hVoice: HAC; pnPanning: Integer): Integer; stdcall;
+function AGetVoicePanning(hVoice: HAC; var pnPanning: Integer): Integer; stdcall;
 function AGetVoiceStatus(hVoice: HAC; var pnStatus: Integer): Integer; stdcall;
 
 function APlayModule(pModule: PAudioModule): Integer; stdcall;
@@ -283,72 +290,661 @@ function ASetModulePosition(nOrder, nRow: Integer): Integer; stdcall;
 function AGetModuleVolume(var pnVolume: Integer): Integer; stdcall;
 function AGetModulePosition(var pnOrder, pnRow: Integer): Integer; stdcall;
 function AGetModuleStatus(var pnStatus: Integer): Integer; stdcall;
+function ASetModuleCallback(pfnAudioCallback: TAudioCallback): Integer; stdcall;
 
-function ALoadModuleFile(pszFileName: PChar; var ppModule: PAudioModule): Integer; stdcall;
+function ALoadModuleFile(pszFileName: PChar; var ppModule: PAudioModule; FileOffset: Longint): Integer; stdcall;
 function AFreeModuleFile(pModule: PAudioModule): Integer; stdcall;
 
-function ALoadWaveFile(pszFileName: PChar; var ppWave: PAudioWave): Integer; stdcall;
+function ALoadWaveFile(pszFileName: PChar; var ppWave: PAudioWave; FileOffset: Longint): Integer; stdcall;
 function AFreeWaveFile(pWave: PAudioWave): Integer; stdcall;
+
+
+type
+  TAudio = class(TObject)
+    constructor Create(Format: Word; SampleRate: Word);
+    destructor Destroy; override;
+    procedure Update;
+  private
+    FInfo: TAudioInfo;
+    function GetProductId: Integer;
+    function GetProductName: String;
+  public
+    property DeviceId: Integer read FInfo.nDeviceId;
+    property ProductId: Integer read GetProductId;
+    property ProductName: String read GetProductName;
+    property Format: Word read FInfo.wFormat;
+    property SampleRate: Word read FInfo.nSampleRate;
+  end;
+
+  TWaveform = class(TObject)
+    constructor Create(Format: Word; SampleRate: Word;
+      Length, LoopStart, LoopEnd: Longint);
+    constructor LoadFromFile(FileName: String);
+    destructor Destroy; override;
+    procedure Write(var Buffer; Count: Integer);
+  private
+    FHandle: TAudioWave;
+    PHandle: PAudioWave;
+    FVolume: Integer;
+    FPanning: Integer;
+    FPosition: Longint;
+    function GetHandle: PAudioWave;
+    procedure SetSampleRate(Value: Word);
+    procedure SetVolume(Value: Integer);
+    procedure SetPanning(Value: Integer);
+    procedure SetPosition(Value: LongInt);
+  public
+    property Handle: PAudioWave read GetHandle;
+    property Format: Word read FHandle.wFormat;
+    property Length: Longint read FHandle.dwLength;
+    property LoopStart: Longint read FHandle.dwLoopStart;
+    property LoopEnd: Longint read FHandle.dwLoopEnd;
+    property SampleRate: Word read FHandle.nSampleRate write SetSampleRate;
+    property Volume: Integer read FVolume write SetVolume;
+    property Panning: Integer read FPanning write SetPanning;
+    property Position: Longint read FPosition write SetPosition;
+  end;
+  
+  TVoice = class(TObject)
+    constructor Create;
+    destructor Destroy; override;
+    procedure Prime(Wave: TWaveform);
+    procedure Play(Wave: TWaveform);
+    procedure Start;
+    procedure Stop;
+  private
+    FHandle: HAC;
+    FWave: TWaveform;
+    function GetHandle: HAC;
+    function GetWaveform: TWaveform;
+    function GetPosition: Longint;
+    procedure SetPosition(Value: Longint);
+    function GetFrequency: Longint;
+    procedure SetFrequency(Value: Longint);
+    function GetVolume: Integer;
+    procedure SetVolume(Value: Integer);
+    function GetPanning: Integer;
+    procedure SetPanning(Value: Integer);
+    function GetStopped: Boolean;
+  public
+    property Handle: HAC read GetHandle;
+    property Waveform: TWaveform read GetWaveform;
+    property Position: Longint read GetPosition write SetPosition;
+    property Frequency: Longint read GetFrequency write SetFrequency;
+    property Volume: Integer read GetVolume write SetVolume;
+    property Panning: Integer read GetPanning write SetPanning;
+    property Stopped: Boolean read GetStopped;
+  end;
+
+  TModule = class(TObject)
+    constructor LoadFromFile(FileName: String);
+    destructor Destroy; override;
+    procedure Play;
+    procedure Stop;
+    procedure Pause;
+    procedure Resume;
+  private
+    FHandle: PAudioModule;
+    FCallback: TAudioCallback;
+    function GetVolume: Integer;
+    procedure SetVolume(Value: Integer);
+    function GetOrder: Integer;
+    procedure SetOrder(Value: Integer);
+    function GetRow: Integer;
+    procedure SetRow(Value: Integer);
+    function GetStopped: Boolean;
+    procedure SetCallback(Value: TAudioCallback);
+  public
+    property Handle: PAudioModule read FHandle;
+    property Volume: Integer read GetVolume write SetVolume;
+    property Order: Integer read GetOrder write SetOrder;
+    property Row: Integer read GetRow write SetRow;
+    property Stopped: Boolean read GetStopped;
+    property OnSync: TAudioCallback read FCallback write SetCallback;
+  private
+    function GetName: String;
+    function GetNumOrders: Integer;
+    function GetNumTracks: Integer;
+    function GetNumPatterns: Integer;
+    function GetNumPatches: Integer;
+    function GetPatch(Index: Integer): PAudioPatch;
+  public
+    property Name: String read GetName;
+    property NumOrders: Integer read GetNumOrders;
+    property NumTracks: Integer read GetNumTracks;
+    property NumPatterns: Integer read GetNumPatterns;
+    property NumPatches: Integer read GetNumPatches;
+    property Patch[Index: Integer]: PAudioPatch read GetPatch;
+  end;
 
 
 implementation
 
-function AInitialize: Integer; stdcall; external 'AUDIOW32' index 100;
-function AGetVersion: Integer; stdcall; external 'AUDIOW32' index 101;
-function AGetAudioNumDevs: Integer; stdcall; external 'AUDIOW32' index 102;
-function AGetAudioDevCaps(nDeviceId: Integer; var pCaps: TAudioCaps): Integer; stdcall; external 'AUDIOW32' index 103;
-function AGetErrorText(nErrorCode: Integer; pText: PChar; nSize: Integer): Integer; stdcall; external 'AUDIOW32' index 104;
+function AInitialize: Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetVersion: Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetAudioNumDevs: Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetAudioDevCaps(nDeviceId: Integer; var pCaps: TAudioCaps): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetErrorText(nErrorCode: Integer; pText: PChar; nSize: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function APingAudio(var pnDeviceId: Integer): Integer; stdcall; external 'AUDIOW32' index 105;
-function AOpenAudio(var pInfo: TAudioInfo): Integer; stdcall; external 'AUDIOW32' index 106;
-function ACloseAudio: Integer; stdcall; external 'AUDIOW32' index 107;
-function AUpdateAudio: Integer; stdcall; external 'AUDIOW32' index 108;
+function APingAudio(var pnDeviceId: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function AOpenAudio(var pInfo: TAudioInfo): Integer; stdcall; external 'AUDIOW32.DLL';
+function ACloseAudio: Integer; stdcall; external 'AUDIOW32.DLL';
+function AUpdateAudio: Integer; stdcall; external 'AUDIOW32.DLL';
 
-function AOpenVoices(nVoices: Integer): Integer; stdcall; external 'AUDIOW32' index 109;
-function ACloseVoices: Integer; stdcall; external 'AUDIOW32' index 110;
+function AOpenVoices(nVoices: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function ACloseVoices: Integer; stdcall; external 'AUDIOW32.DLL';
 
-function ASetAudioCallback(pfnWaveProc: TAudioWaveProc): Integer; stdcall; external 'AUDIOW32' index 111;
-function ASetAudioTimerProc(pfnTimerProc: TAudioTimerProc): Integer; stdcall; external 'AUDIOW32' index 112;
-function ASetAudioTimerRate(nTimerRate: Integer): Integer; stdcall; external 'AUDIOW32' index 113;
+function ASetAudioCallback(pfnWaveProc: TAudioWaveProc): Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetAudioTimerProc(pfnTimerProc: TAudioTimerProc): Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetAudioTimerRate(nTimerRate: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function AGetAudioDataAvail: Longint; stdcall; external 'AUDIOW32' index 114;
-function ACreateAudioData(pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32' index 115;
-function ADestroyAudioData(pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32' index 116;
-function AWriteAudioData(pWave: PAudioWave; dwOffset: Longint; nCount: Integer): Integer; stdcall; external 'AUDIOW32' index 117;
+function AGetAudioDataAvail: Longint; stdcall; external 'AUDIOW32.DLL';
+function ACreateAudioData(pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32.DLL';
+function ADestroyAudioData(pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32.DLL';
+function AWriteAudioData(pWave: PAudioWave; dwOffset: Longint; nCount: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function ACreateAudioVoice(var phVoice: HAC): Integer; stdcall; external 'AUDIOW32' index 118;
-function ADestroyAudioVoice(hVoice: HAC): Integer; stdcall; external 'AUDIOW32' index 119;
+function ACreateAudioVoice(var phVoice: HAC): Integer; stdcall; external 'AUDIOW32.DLL';
+function ADestroyAudioVoice(hVoice: HAC): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function APlayVoice(hVoice: HAC; pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32' index 120;
-function APrimeVoice(hVoice: HAC; pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32' index 121;
-function AStartVoice(hVoice: HAC): Integer; stdcall; external 'AUDIOW32' index 122;
-function AStopVoice(hVoice: HAC): Integer; stdcall; external 'AUDIOW32' index 123;
+function APlayVoice(hVoice: HAC; pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32.DLL';
+function APrimeVoice(hVoice: HAC; pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32.DLL';
+function AStartVoice(hVoice: HAC): Integer; stdcall; external 'AUDIOW32.DLL';
+function AStopVoice(hVoice: HAC): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function ASetVoicePosition(hVoice: HAC; dwPosition: Longint): Integer; stdcall; external 'AUDIOW32' index 124;
-function ASetVoiceFrequency(hVoice: HAC; dwFrequency: Longint): Integer; stdcall; external 'AUDIOW32' index 125;
-function ASetVoiceVolume(hVoice: HAC; nVolume: Integer): Integer; stdcall; external 'AUDIOW32' index 126;
-function ASetVoicePanning(hVoice: HAC; nPanning: Integer): Integer; stdcall; external 'AUDIOW32' index 127;
+function ASetVoicePosition(hVoice: HAC; dwPosition: Longint): Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetVoiceFrequency(hVoice: HAC; dwFrequency: Longint): Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetVoiceVolume(hVoice: HAC; nVolume: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetVoicePanning(hVoice: HAC; nPanning: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function AGetVoicePosition(hVoice: HAC; var pdwPosition: Longint): Integer; stdcall; external 'AUDIOW32' index 128;
-function AGetVoiceFrequency(hVoice: HAC; var pdwFrequency: Longint): Integer; stdcall; external 'AUDIOW32' index 129;
-function AGetVoiceVolume(hVoice: HAC; var pnVolume: Integer): Integer; stdcall; external 'AUDIOW32' index 130;
-function AGetVoicePanning(hVoice: HAC; pnPanning: Integer): Integer; stdcall; external 'AUDIOW32' index 131;
-function AGetVoiceStatus(hVoice: HAC; var pnStatus: Integer): Integer; stdcall; external 'AUDIOW32' index 132;
+function AGetVoicePosition(hVoice: HAC; var pdwPosition: Longint): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetVoiceFrequency(hVoice: HAC; var pdwFrequency: Longint): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetVoiceVolume(hVoice: HAC; var pnVolume: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetVoicePanning(hVoice: HAC; var pnPanning: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetVoiceStatus(hVoice: HAC; var pnStatus: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function APlayModule(pModule: PAudioModule): Integer; stdcall; external 'AUDIOW32' index 133;
-function AStopModule: Integer; stdcall; external 'AUDIOW32' index 134;
-function APauseModule: Integer; stdcall; external 'AUDIOW32' index 135;
-function AResumeModule: Integer; stdcall; external 'AUDIOW32' index 136;
-function ASetModuleVolume(nVolume: Integer): Integer; stdcall; external 'AUDIOW32' index 137;
-function ASetModulePosition(nOrder, nRow: Integer): Integer; stdcall; external 'AUDIOW32' index 138;
-function AGetModuleVolume(var pnVolume: Integer): Integer; stdcall; external 'AUDIOW32' index 139;
-function AGetModulePosition(var pnOrder, pnRow: Integer): Integer; stdcall; external 'AUDIOW32' index 140;
-function AGetModuleStatus(var pnStatus: Integer): Integer; stdcall; external 'AUDIOW32' index 141;
+function APlayModule(pModule: PAudioModule): Integer; stdcall; external 'AUDIOW32.DLL';
+function AStopModule: Integer; stdcall; external 'AUDIOW32.DLL';
+function APauseModule: Integer; stdcall; external 'AUDIOW32.DLL';
+function AResumeModule: Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetModuleVolume(nVolume: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetModulePosition(nOrder, nRow: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetModuleVolume(var pnVolume: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetModulePosition(var pnOrder, pnRow: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function AGetModuleStatus(var pnStatus: Integer): Integer; stdcall; external 'AUDIOW32.DLL';
+function ASetModuleCallback(pfnAudioCallback: TAudioCallback): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function ALoadModuleFile(pszFileName: PChar; var ppModule: PAudioModule): Integer; stdcall; external 'AUDIOW32' index 142;
-function AFreeModuleFile(pModule: PAudioModule): Integer; stdcall; external 'AUDIOW32' index 143;
+function ALoadModuleFile(pszFileName: PChar; var ppModule: PAudioModule; FileOffset: Longint): Integer; stdcall; external 'AUDIOW32.DLL';
+function AFreeModuleFile(pModule: PAudioModule): Integer; stdcall; external 'AUDIOW32.DLL';
 
-function ALoadWaveFile(pszFileName: PChar; var ppWave: PAudioWave): Integer; stdcall; external 'AUDIOW32' index 144;
-function AFreeWaveFile(pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32' index 145;
+function ALoadWaveFile(pszFileName: PChar; var ppWave: PAudioWave; FileOffset: Longint): Integer; stdcall; external 'AUDIOW32.DLL';
+function AFreeWaveFile(pWave: PAudioWave): Integer; stdcall; external 'AUDIOW32.DLL';
+
+
+const
+  Semaphore: LongBool = False;
+  PlayingModule: PAudioModule = nil;
+
+function SetPlayingModule(Value: PAudioModule): Boolean; pascal; assembler;
+asm
+  mov  eax,True
+  xchg eax,Semaphore
+  cmp  eax,False
+  jne  @@1
+  mov  eax,PlayingModule
+  test eax,eax
+  jne  @@0
+  mov  eax,Value
+  mov  PlayingModule,eax
+@@0:
+  mov  Semaphore,False
+@@1:
+  push edx
+  xor  eax,eax
+  mov  edx,PlayingModule
+  cmp  edx,Value
+  sete al
+  pop  edx
+end;
+
+procedure Assert(Header: String; ErrorCode: Integer);
+var
+  szText: Array [0..255] of Char;
+begin
+  if ErrorCode <> AUDIO_ERROR_NONE then
+  begin
+    AGetErrorText(ErrorCode, szText, sizeof(szText) - 1);
+    raise Exception.Create(Header + ': ' + StrPas(szText));
+  end;
+end;
+
+
+{ TAudio }
+constructor TAudio.Create(Format: Word; SampleRate: Word);
+begin
+  inherited Create;
+  FInfo.nDeviceId := AUDIO_DEVICE_MAPPER;
+  FInfo.wFormat := Format;
+  FInfo.nSampleRate := SampleRate;
+  Assert('AOpenAudio', AOpenAudio(FInfo));
+  Assert('AOpenVoices', AOpenVoices(32));
+end;
+
+destructor TAudio.Destroy;
+begin
+  Assert('ACloseVoices', ACloseVoices);
+  Assert('ACloseAudio', ACloseAudio);
+  inherited Destroy;
+end;
+
+procedure TAudio.Update;
+begin
+  Assert('AUpdateAudio', AUpdateAudio);
+end;
+
+function TAudio.GetProductId: Integer;
+var
+  Caps: TAudioCaps;
+begin
+  Assert('AGetAudioDevCaps', AGetAudioDevCaps(FInfo.nDeviceId, Caps));
+  Result := Caps.wProductId;
+end;
+
+function TAudio.GetProductName: String;
+var
+  Caps: TAudioCaps;
+begin
+  Assert('AGetAudioDevCaps', AGetAudioDevCaps(FInfo.nDeviceId, Caps));
+  Result := StrPas(Caps.szProductName);
+end;
+
+
+{ TWaveform }
+constructor TWaveform.Create(Format: Word; SampleRate: Word;
+  Length, LoopStart, LoopEnd: Longint);
+begin
+  inherited Create;
+  FPosition := 0;
+  FVolume := 64;
+  FPanning := 128;
+  FHandle.wFormat := Format;
+  FHandle.dwLength := Length;
+  FHandle.dwLoopStart := LoopStart;
+  FHandle.dwLoopEnd := LoopEnd;
+  FHandle.nSampleRate := SampleRate;
+  PHandle := nil;
+  Assert('ACreateAudioData', ACreateAudioData(@FHandle));
+end;
+
+constructor TWaveform.LoadFromFile(FileName: String);
+var
+  szFileName: Array [0..255] of Char;
+begin
+  inherited Create;
+  FPosition := 0;
+  FVolume := 64;
+  FPanning := 128;
+  FHandle.pData := nil;
+  FHandle.wFormat := AUDIO_FORMAT_8BITS or AUDIO_FORMAT_MONO;
+  FHandle.dwLength := 0;
+  FHandle.dwLoopStart := 0;
+  FHandle.dwLoopEnd := 0;
+  FHandle.nSampleRate := 22050;
+  Assert('ALoadWaveFile', ALoadWaveFile(StrPCopy(szFileName, FileName), PHandle, 0));
+  if Assigned(PHandle) then
+    FHandle := PHandle^;
+end;
+
+destructor TWaveform.Destroy;
+begin
+  if Assigned(PHandle) then
+  begin
+    Assert('AFreeWaveFile', AFreeWaveFile(PHandle));
+  end
+  else if Assigned(FHandle.pData) then
+  begin
+    Assert('ADestroyAudioData', ADestroyAudioData(@FHandle));
+  end;
+  inherited Destroy;
+end;
+
+procedure TWaveform.Write(var Buffer; Count: Integer);
+var
+  Size: Integer;
+begin
+  if Assigned(FHandle.pData) then
+  begin
+    while (Count > 0) and (FHandle.dwLength > 0) do
+    begin
+      Size := Count;
+      if FPosition + Size > FHandle.dwLength then
+        Size := FHandle.dwLength - FPosition;
+      Move(Buffer, PChar(FHandle.pData)[FPosition], Size);
+      Assert('AWriteAudioData', AWriteAudioData(@FHandle, FPosition, Size));
+      Inc(FPosition, Size);
+      if FPosition >= FHandle.dwLength then
+        Dec(FPosition, FHandle.dwLength);
+      Dec(Count, Size);
+    end;
+  end;
+end;
+
+function TWaveform.GetHandle: PAudioWave;
+begin
+  Result := @FHandle;
+end;
+
+procedure TWaveform.SetSampleRate(Value: Word);
+begin
+  if (Value >= AUDIO_MIN_FREQUENCY) and (Value <= AUDIO_MAX_FREQUENCY) then
+    FHandle.nSampleRate := Value;
+end;
+
+procedure TWaveform.SetVolume(Value: Integer);
+begin
+  if (Value >= AUDIO_MIN_VOLUME) and (Value <= AUDIO_MAX_VOLUME) then
+    FVolume := Value;
+end;
+
+procedure TWaveform.SetPanning(Value: Integer);
+begin
+  if (Value >= AUDIO_MIN_PANNING) and (Value <= AUDIO_MAX_PANNING) then
+    FPanning := Value;
+end;
+
+procedure TWaveform.SetPosition(Value: LongInt);
+begin
+  if (Value >= 0) and (Value < FHandle.dwLength) then
+    FPosition := Value;
+end;
+
+
+{ TVoice}
+constructor TVoice.Create;
+begin
+  inherited Create;
+  FWave := nil;
+  Assert('ACreateAudioVoice', ACreateAudioVoice(FHandle));
+end;
+
+destructor TVoice.Destroy;
+begin
+  if FHandle <> 0 then
+    Assert('ADestroyAudioVoice', ADestroyAudioVoice(FHandle));
+  inherited Destroy;
+end;
+
+procedure TVoice.Prime(Wave: TWaveform);
+begin
+  if Assigned(Wave) then
+  begin
+    FWave := Wave;
+    Assert('APrimeVoice', APrimeVoice(FHandle, FWave.Handle));
+    Assert('ASetVoiceFrequency', ASetVoiceFrequency(FHandle, FWave.SampleRate));
+    Assert('ASetVoiceVolume', ASetVoiceVolume(FHandle, FWave.Volume));
+    Assert('ASetVoicePanning', ASetVoicePanning(FHandle, FWave.Panning));
+  end;
+end;
+
+procedure TVoice.Play(Wave: TWaveform);
+begin
+  if Assigned(Wave) then
+  begin
+    FWave := Wave;
+    Assert('APrimeVoice', APrimeVoice(FHandle, FWave.Handle));
+    Assert('ASetVoiceFrequency', ASetVoiceFrequency(FHandle, FWave.SampleRate));
+    Assert('ASetVoiceVolume', ASetVoiceVolume(FHandle, FWave.Volume));
+    Assert('ASetVoicePanning', ASetVoicePanning(FHandle, FWave.Panning));
+    Assert('AStartVoice', AStartVoice(FHandle));
+  end;
+end;
+
+procedure TVoice.Start;
+begin
+  Assert('AStartVoice', AStartVoice(FHandle));
+end;
+
+procedure TVoice.Stop;
+begin
+  Assert('AStopVoice', AStopVoice(FHandle));
+end;
+
+function TVoice.GetHandle: HAC;
+begin
+  Result := FHandle;
+end;
+
+function TVoice.GetWaveform: TWaveform;
+begin
+  Result := FWave;
+end;
+
+function TVoice.GetPosition: Longint;
+var
+  Value: Longint;
+begin
+  Assert('AGetVoicePosition', AGetVoicePosition(FHandle, Value));
+  Result := Value;
+end;
+
+procedure TVoice.SetPosition(Value: Longint);
+begin
+  Assert('ASetVoicePosition', ASetVoicePosition(FHandle, Value));
+end;
+
+function TVoice.GetFrequency: Longint;
+var
+  Value: Longint;
+begin
+  Assert('AGetVoiceFrequency', AGetVoiceFrequency(FHandle, Value));
+  Result := Value;
+end;
+
+procedure TVoice.SetFrequency(Value: Longint);
+begin
+  Assert('ASetVoiceFrequency', ASetVoiceFrequency(FHandle, Value));
+end;
+
+function TVoice.GetVolume: Integer;
+var
+  Value: Integer;
+begin
+  Assert('AGetVoiceVolume', AGetVoiceVolume(FHandle, Value));
+  Result := Value;
+end;
+
+procedure TVoice.SetVolume(Value: Integer);
+begin
+  Assert('ASetVoiceVolume', ASetVoiceVolume(FHandle, Value));
+end;
+
+function TVoice.GetPanning: Integer;
+var
+  Value: Integer;
+begin
+  Assert('AGetVoicePanning', AGetVoicePanning(FHandle, Value));
+  Result := Value;
+end;
+
+procedure TVoice.SetPanning(Value: Integer);
+begin
+  Assert('ASetVoicePanning', ASetVoicePanning(FHandle, Value));
+end;
+
+function TVoice.GetStopped: Boolean;
+var
+  Value: Integer;
+begin
+  Assert('AGetVoiceStatus', AGetVoiceStatus(FHandle, Value));
+  Result := Value <> 0;
+end;
+
+
+{ TModule }
+constructor TModule.LoadFromFile(FileName: String);
+var
+  szFileName: Array [0..255] of Char;
+begin
+  inherited Create;
+  FHandle := nil;
+  FCallback := nil;
+  Assert('ALoadModuleFile', ALoadModuleFile(StrPCopy(szFileName, FileName), FHandle, 0));
+end;
+
+destructor TModule.Destroy;
+begin
+  if Assigned(FHandle) then
+  begin
+    if not Stopped then Stop;
+    Assert('AFreeModuleFile', AFreeModuleFile(FHandle));
+  end;
+  inherited Destroy;
+end;
+
+procedure TModule.Play;
+begin
+  if Assigned(FHandle) and SetPlayingModule(FHandle) then
+    Assert('APlayModule', APlayModule(FHandle));
+end;
+
+procedure TModule.Stop;
+begin
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+  begin
+    Assert('AStopModule', AStopModule);
+    PlayingModule := nil;
+  end;
+end;
+
+procedure TModule.Pause;
+begin
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+    Assert('APauseModule', APauseModule);
+end;
+
+procedure TModule.Resume;
+begin
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+    Assert('AResumeModule', AResumeModule);
+end;
+
+function TModule.GetVolume: Integer;
+var
+  Value: Integer;
+begin
+  Result := 0;
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+  begin
+    Assert('AGetModuleVolume', AGetModuleVolume(Value));
+    Result := Value;
+  end;
+end;
+
+procedure TModule.SetVolume(Value: Integer);
+begin
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+    Assert('ASetModuleVolume', ASetModuleVolume(Value));
+end;
+
+function TModule.GetOrder: Integer;
+var
+  Order, Row: Integer;
+begin
+  Result := 0;
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+  begin
+    Assert('AGetModulePosition', AGetModulePosition(Order, Row));
+    Result := Order;
+  end;
+end;
+
+procedure TModule.SetOrder(Value: Integer);
+begin
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+    Assert('ASetModulePosition', ASetModulePosition(Value, Row));
+end;
+
+function TModule.GetRow: Integer;
+var
+  Order, Row: Integer;
+begin
+  Result := 0;
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+  begin
+    Assert('AGetModulePosition', AGetModulePosition(Order, Row));
+    Result := Row;
+  end;
+end;
+
+procedure TModule.SetRow(Value: Integer);
+begin
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+    Assert('ASetModulePosition', ASetModulePosition(Order, Value));
+end;
+
+function TModule.GetStopped: Boolean;
+var
+  Value: Integer;
+begin
+  Result := True;
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+  begin
+    Assert('AGetModuleStatus', AGetModuleStatus(Value));
+    Result := Value <> 0;
+  end;
+end;
+
+procedure TModule.SetCallback(Value: TAudioCallback);
+begin
+  if Assigned(FHandle) and (PlayingModule = FHandle) then
+  begin
+    FCallback := Value;
+    Assert('ASetModuleCallback', ASetModuleCallback(Value));
+  end;
+end;
+
+function TModule.GetName: String;
+begin
+  Result := '';
+  if Assigned(FHandle) then
+    Result := StrPas(FHandle^.szModuleName);
+end;
+
+function TModule.GetNumOrders: Integer;
+begin
+  Result := 0;
+  if Assigned(FHandle) then
+    Result := FHandle^.nOrders;
+end;
+
+function TModule.GetNumTracks: Integer;
+begin
+  Result := 0;
+  if Assigned(FHandle) then
+    Result := FHandle^.nTracks;
+end;
+
+function TModule.GetNumPatterns: Integer;
+begin
+  Result := 0;
+  if Assigned(FHandle) then
+    Result := FHandle^.nPatterns;
+end;
+
+function TModule.GetNumPatches: Integer;
+begin
+  Result := 0;
+  if Assigned(FHandle) then
+    Result := FHandle^.nPatches;
+end;
+
+function TModule.GetPatch(Index: Integer): PAudioPatch;
+begin
+  Result := nil;
+  if Assigned(FHandle) then
+  begin
+    if (Index >= 1) and (Index <= FHandle^.nPatches) then
+      Result := PAudioPatch(@PChar(FHandle^.aPatchTable)[sizeof(TAudioPatch) * Pred(Index)]);
+  end;
+end;
 
 end.

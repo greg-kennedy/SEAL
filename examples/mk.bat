@@ -30,52 +30,53 @@ echo **** 16-bit Windows 3.x protected mode, large memory model:
 echo ****   w16bc - Borland C++ 3.1 protected mode (Win16)
 echo ****   w16wc - Watcom C/C++16 10.0 protected mode (Win16)
 echo ****
-echo **** 32-bit Windows 95/NT protected node, flat memory model:
+echo **** 32-bit Windows 95/NT protected mode, flat memory model:
 echo ****   w32bc - Borland C++ 4.5 protected mode (Win32)
 echo ****   w32wc - Watcom C/C++16 10.0 protected mode (Win32)
 echo ****   w32vc - Microsoft Visual C++ 4.1 protected mode (Win32)
 echo ****   w32bp - Borland Delphi 2.0 protected mode (Win32)
 echo ****
+echo **** NOTE: 16-bit libraries are not available in this release.
 goto exit
 
 :bcl
-for f in (*.c) bcc -ml -I..\include ..\lib\dos\audiobcl.lib %f
+for %%f in (*.c) do bcc -ml -I..\include ..\lib\dos\audiobcl.lib %%f
 goto exit
 
 :wcl
-for f in (*.c) wcl -ml -I..\include ..\lib\dos\audiowcl.lib %f
+for %%f in (*.c) do wcl -ml -I..\include ..\lib\dos\audiowcl.lib %%f
 goto exit
 
 :bcx
-for f in (*.c) bcc -ml -WX -I..\include ..\lib\dpmi16\audiobcx.lib %f
+for %%f in (*.c) do bcc -ml -WX -I..\include ..\lib\dos\audiobcx.lib %%f
 goto exit
 
 :wcf
-for f in (*.c) wcl386 -I..\include ..\lib\dpmi32\audiowcf.lib %f
+for %%f in (*.c) do wcl386 -zq -I..\include ..\lib\dos\audiowcf.lib %%f
 goto exit
 
 :djf
-for f in (1 2 3 4 5) gcc -o example%f.exe -I..\include example%f.c ..\lib\dpmi32\audiodjf.a
+for %%f in (1 2 3 4) do gcc -o example%%f.exe -I..\include example%%f.c -L..\lib\dos -laudio
 goto exit
 
 :w16bc
-for f in (*.c) bcc -ml -W -I..\include ..\lib\win16\audw16bc.lib %f
+for %%f in (*.c) do bcc -ml -W -I..\include ..\lib\win16\audw16bc.lib %%f
 goto exit
 
 :w16wc
-for f in (*.c) wcl -ml -zw -I..\include ..\lib\win16\audw16wc.lib mmsystem.lib %f
+for %%f in (*.c) do wcl -ml -zw -I..\include ..\lib\win16\audw16wc.lib mmsystem.lib %%f
 goto exit
 
 :w32bc
-for f in (*.c) bcc32a -WC -I..\include ..\lib\win32\audw32bc.lib %f
+for %%f in (*.c) do bcc32a -WC -DWIN32 -I..\include ..\lib\win32\audw32bc.lib %%f
 goto exit
 
 :w32wc
-for f in (*.c) wcl386 -l=nt -I..\include ..\lib\win32\audw32wc.lib %f
+for %%f in (*.c) do wcl386 -l=nt -DWIN32 -I..\include ..\lib\win32\audw32wc.lib %%f
 goto exit
 
 :w32vc
-for f in (*.c) cl -D__FLAT__ -I..\include ..\lib\win32\audw32vc.lib %f
+for %%f in (*.c) do cl -DWIN32 -I..\include ..\lib\win32\audw32vc.lib %%f
 goto exit
 
 :w32bp

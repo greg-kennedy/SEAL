@@ -1,10 +1,16 @@
 /*
- * $Id: audio.c 1.9 1996/06/02 17:02:07 chasan released $
+ * $Id: audio.c 1.13 1996/12/12 16:32:06 chasan Exp $
+ *              1.14 1998/10/18 14:59:21 chasan (BeOS and OS/2 driver)
+ *              1.15 1998/11/30 18:20:26 chasan (Mixer and UpdateAudioEx API)
  *
  * Audio device drivers API interface
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #ifdef __GNUC__
@@ -19,8 +25,13 @@
 /*
  * Copyright information hard-coded into the library
  */
-char szAudioCopyright[] =
-    "SEAL Synthetic Audio Library 1.0 Copyright (C) 1995, 1996 Carlos Hasan";
+CHAR szAudioCopyright[] =
+"SEAL Synthetic Audio Library 1.07 (Build " __DATE__ ")\n"
+"Copyright (C) 1995, 1996, 1997, 1998, 1999 Carlos Hasan\n";
+#ifdef __OS2__
+CHAR szMartyCopyright[] =
+"OS/2 Audio Driver Copyright (C) 1998 by Martin Amodeo";
+#endif
 
 
 /*
@@ -37,7 +48,7 @@ char szAudioCopyright[] =
 /*
  * Table of registered audio device drivers and channels.
  */
-static PAUDIODRIVER aDriverTable[MAXDRIVERS];
+static LPAUDIODRIVER aDriverTable[MAXDRIVERS];
 static HAC aVoiceTable[MAXVOICES];
 static UINT nNumVoices;
 
@@ -62,9 +73,9 @@ UINT AIAPI AAudioFatalError(UINT nErrorCode)
     return nErrorCode;
 }
 
-UINT AIAPI AGetErrorText(UINT nErrorCode, PSZ pText, UINT nSize)
+UINT AIAPI AGetErrorText(UINT nErrorCode, LPSTR lpText, UINT nSize)
 {
-    static PSZ aErrorTable[] =
+    static LPSTR aErrorTable[] =
     {
         "Unknown audio system error",
         "Bad channel or sample handle",
@@ -80,24 +91,24 @@ UINT AIAPI AGetErrorText(UINT nErrorCode, PSZ pText, UINT nSize)
         "Bad file format"
     };
 
-    if (pText != NULL) {
+    if (lpText != NULL) {
         if (nErrorCode <= AUDIO_LAST_ERROR) {
-            strncpy(pText, aErrorTable[nErrorCode], nSize);
+            strncpy(lpText, aErrorTable[nErrorCode], nSize);
             return AUDIO_ERROR_NONE;
         }
-        strncpy(pText, aErrorTable[AUDIO_ERROR_NONE], nSize);
+        strncpy(lpText, aErrorTable[AUDIO_ERROR_NONE], nSize);
     }
     return AUDIO_ERROR_INVALPARAM;
 }
 
-UINT AIAPI ARegisterAudioDriver(PAUDIODRIVER pDriver)
+UINT AIAPI ARegisterAudioDriver(LPAUDIODRIVER lpDriver)
 {
     UINT nDeviceId;
 
     for (nDeviceId = 0; nDeviceId < MAXDRIVERS; nDeviceId++) {
         if (aDriverTable[nDeviceId] == NULL ||
-            aDriverTable[nDeviceId] == pDriver) {
-            aDriverTable[nDeviceId] = pDriver;
+            aDriverTable[nDeviceId] == lpDriver) {
+            aDriverTable[nDeviceId] = lpDriver;
             return AUDIO_ERROR_NONE;
         }
     }
@@ -116,19 +127,19 @@ UINT AIAPI AGetAudioNumDevs(VOID)
     return nNumDevs;
 }
 
-UINT AIAPI AGetAudioDevCaps(UINT nDeviceId, PAUDIOCAPS pCaps)
+UINT AIAPI AGetAudioDevCaps(UINT nDeviceId, LPAUDIOCAPS lpCaps)
 {
-    PAUDIODRIVER pDriver;
+    LPAUDIODRIVER lpDriver;
 
-    if (pCaps != NULL) {
-        memset(pCaps, 0, sizeof(AUDIOCAPS));
+    if (lpCaps != NULL) {
+        memset(lpCaps, 0, sizeof(AUDIOCAPS));
         if (nDeviceId < MAXDRIVERS) {
-            if ((pDriver = aDriverTable[nDeviceId]) != NULL) {
-                if (pDriver->pWaveDriver != NULL) {
-                    return pDriver->pWaveDriver->GetAudioCaps(pCaps);
+            if ((lpDriver = aDriverTable[nDeviceId]) != NULL) {
+                if (lpDriver->lpWaveDriver != NULL) {
+                    return lpDriver->lpWaveDriver->GetAudioCaps(lpCaps);
                 }
-                else if (pDriver->pSynthDriver != NULL) {
-                    return pDriver->pSynthDriver->GetAudioCaps(pCaps);
+                else if (lpDriver->lpSynthDriver != NULL) {
+                    return lpDriver->lpSynthDriver->GetAudioCaps(lpCaps);
                 }
             }
         }
@@ -137,24 +148,24 @@ UINT AIAPI AGetAudioDevCaps(UINT nDeviceId, PAUDIOCAPS pCaps)
     return AUDIO_ERROR_INVALPARAM;
 }
 
-UINT AIAPI APingAudio(PUINT pnDeviceId)
+UINT AIAPI APingAudio(LPUINT lpnDeviceId)
 {
-    PAUDIODRIVER pDriver;
+    LPAUDIODRIVER lpDriver;
     UINT nDeviceId;
 
-    if (pnDeviceId != NULL) {
-        *pnDeviceId = AUDIO_DEVICE_NONE;
+    if (lpnDeviceId != NULL) {
+        *lpnDeviceId = AUDIO_DEVICE_NONE;
         if (nDriverId == AUDIO_DEVICE_MAPPER) {
             for (nDeviceId = MAXDRIVERS - 1; nDeviceId != 0; nDeviceId--) {
-                if ((pDriver = aDriverTable[nDeviceId]) != NULL) {
-                    if (pDriver->pWaveDriver != NULL &&
-                        !pDriver->pWaveDriver->PingAudio()) {
-                        *pnDeviceId = nDeviceId;
+                if ((lpDriver = aDriverTable[nDeviceId]) != NULL) {
+                    if (lpDriver->lpWaveDriver != NULL &&
+                        !lpDriver->lpWaveDriver->PingAudio()) {
+                        *lpnDeviceId = nDeviceId;
                         return AUDIO_ERROR_NONE;
                     }
-                    else if (pDriver->pSynthDriver != NULL &&
-                        !pDriver->pSynthDriver->PingAudio()) {
-                        *pnDeviceId = nDeviceId;
+                    else if (lpDriver->lpSynthDriver != NULL &&
+			     !lpDriver->lpSynthDriver->PingAudio()) {
+                        *lpnDeviceId = nDeviceId;
                         return AUDIO_ERROR_NONE;
                     }
                 }
@@ -166,43 +177,43 @@ UINT AIAPI APingAudio(PUINT pnDeviceId)
     return AUDIO_ERROR_INVALPARAM;
 }
 
-UINT AIAPI AOpenAudio(PAUDIOINFO pInfo)
+UINT AIAPI AOpenAudio(LPAUDIOINFO lpInfo)
 {
-    PAUDIODRIVER pDriver;
-    PAUDIOWAVEDRIVER pWaveDriver;
-    PAUDIOSYNTHDRIVER pSynthDriver;
+    LPAUDIODRIVER lpDriver;
+    LPAUDIOWAVEDRIVER lpWaveDriver;
+    LPAUDIOSYNTHDRIVER lpSynthDriver;
     UINT nErrorCode;
 
     if (nDriverId == AUDIO_DEVICE_MAPPER) {
-        if (pInfo != NULL && pInfo->nDeviceId == AUDIO_DEVICE_MAPPER) {
-            nErrorCode = APingAudio(&pInfo->nDeviceId);
+        if (lpInfo != NULL && lpInfo->nDeviceId == AUDIO_DEVICE_MAPPER) {
+            nErrorCode = APingAudio(&lpInfo->nDeviceId);
             if (nErrorCode != AUDIO_ERROR_NONE)
                 return AAudioFatalError(nErrorCode);
         }
-        if (pInfo != NULL && pInfo->nDeviceId < MAXDRIVERS) {
-            if ((pDriver = aDriverTable[pInfo->nDeviceId]) != NULL) {
-                if ((pWaveDriver = pDriver->pWaveDriver) == NULL)
-                    pWaveDriver = &NoneWaveDriver;
-                if ((pSynthDriver = pDriver->pSynthDriver) == NULL)
-                    pSynthDriver = &EmuSynthDriver;
-                memcpy(&WaveDriver, pWaveDriver, sizeof(AUDIOWAVEDRIVER));
-                memcpy(&SynthDriver, pSynthDriver, sizeof(AUDIOSYNTHDRIVER));
-                nErrorCode = WaveDriver.OpenAudio(pInfo);
+        if (lpInfo != NULL && lpInfo->nDeviceId < MAXDRIVERS) {
+            if ((lpDriver = aDriverTable[lpInfo->nDeviceId]) != NULL) {
+                if ((lpWaveDriver = lpDriver->lpWaveDriver) == NULL)
+                    lpWaveDriver = &NoneWaveDriver;
+                if ((lpSynthDriver = lpDriver->lpSynthDriver) == NULL)
+                    lpSynthDriver = &EmuSynthDriver;
+                memcpy(&WaveDriver, lpWaveDriver, sizeof(AUDIOWAVEDRIVER));
+                memcpy(&SynthDriver, lpSynthDriver, sizeof(AUDIOSYNTHDRIVER));
+                nErrorCode = WaveDriver.OpenAudio(lpInfo);
                 if (nErrorCode != AUDIO_ERROR_NONE)
                     return AAudioFatalError(nErrorCode);
-                nErrorCode = SynthDriver.OpenAudio(pInfo);
+                nErrorCode = SynthDriver.OpenAudio(lpInfo);
                 if (nErrorCode != AUDIO_ERROR_NONE) {
                     WaveDriver.CloseAudio();
                     return AAudioFatalError(nErrorCode);
                 }
                 memset(aVoiceTable, 0, sizeof(aVoiceTable));
                 nNumVoices = 0;
-                nDriverId = pInfo->nDeviceId;
+                nDriverId = lpInfo->nDeviceId;
                 return AUDIO_ERROR_NONE;
             }
         }
-        return AAudioFatalError(pInfo != NULL ? AUDIO_ERROR_BADDEVICEID :
-            AUDIO_ERROR_INVALPARAM);
+        return AAudioFatalError(lpInfo != NULL ? AUDIO_ERROR_BADDEVICEID :
+				AUDIO_ERROR_INVALPARAM);
     }
     return AUDIO_ERROR_NOTSUPPORTED;
 }
@@ -221,13 +232,18 @@ UINT AIAPI ACloseAudio(VOID)
 
 UINT AIAPI AUpdateAudio(VOID)
 {
-    static UINT nSemaphore = 0;
+    return AUpdateAudioEx(0);
+}
+
+UINT AIAPI AUpdateAudioEx(UINT nFrames)
+{
+    static UINT nSemalphore = 0;
     UINT nErrorCode = AUDIO_ERROR_NONE;
 
-    /* TODO: This is not a real semaphore, may fail sometimes. */
+    /* TODO: This is not a real semalphore, may fail sometimes. */
     if (nDriverId != AUDIO_DEVICE_MAPPER) {
-        if (!nSemaphore++) nErrorCode = WaveDriver.UpdateAudio();
-        nSemaphore--;
+        if (!nSemalphore++) nErrorCode = WaveDriver.UpdateAudio(nFrames);
+        nSemalphore--;
     }
     return nErrorCode;
 }
@@ -255,14 +271,14 @@ UINT AIAPI ACloseVoices(VOID)
     return SynthDriver.CloseVoices();
 }
 
-UINT AIAPI ASetAudioCallback(PFNAUDIOWAVE pfnAudioWave)
+UINT AIAPI ASetAudioCallback(LPFNAUDIOWAVE lpfnAudioWave)
 {
-    return WaveDriver.SetAudioCallback(pfnAudioWave);
+    return WaveDriver.SetAudioCallback(lpfnAudioWave);
 }
 
-UINT AIAPI ASetAudioTimerProc(PFNAUDIOTIMER pfnAudioTimer)
+UINT AIAPI ASetAudioTimerProc(LPFNAUDIOTIMER lpfnAudioTimer)
 {
-    return SynthDriver.SetAudioTimerProc(pfnAudioTimer);
+    return SynthDriver.SetAudioTimerProc(lpfnAudioTimer);
 }
 
 UINT AIAPI ASetAudioTimerRate(UINT nTimerRate)
@@ -270,21 +286,26 @@ UINT AIAPI ASetAudioTimerRate(UINT nTimerRate)
     return SynthDriver.SetAudioTimerRate(nTimerRate);
 }
 
+UINT AIAPI ASetAudioMixerValue(UINT nChannel, UINT nValue)
+{
+    return SynthDriver.SetAudioMixerValue(nChannel, nValue);
+}
+
 LONG AIAPI AGetAudioDataAvail(VOID)
 {
     return SynthDriver.GetAudioDataAvail();
 }
 
-UINT AIAPI ACreateAudioData(PAUDIOWAVE pWave)
+UINT AIAPI ACreateAudioData(LPAUDIOWAVE lpWave)
 {
     UINT nErrorCode;
 
-    if (pWave != NULL) {
-        if ((pWave->pData = malloc(pWave->dwLength + 4)) != NULL) {
-            nErrorCode = SynthDriver.CreateAudioData(pWave);
+    if (lpWave != NULL) {
+        if ((lpWave->lpData = malloc(lpWave->dwLength + 4)) != NULL) {
+            nErrorCode = SynthDriver.CreateAudioData(lpWave);
             if (nErrorCode != AUDIO_ERROR_NONE) {
-                free(pWave->pData);
-                pWave->pData = NULL;
+                free(lpWave->lpData);
+                lpWave->lpData = NULL;
             }
             return nErrorCode;
         }
@@ -293,38 +314,38 @@ UINT AIAPI ACreateAudioData(PAUDIOWAVE pWave)
     return AUDIO_ERROR_INVALPARAM;
 }
 
-UINT AIAPI ADestroyAudioData(PAUDIOWAVE pWave)
+UINT AIAPI ADestroyAudioData(LPAUDIOWAVE lpWave)
 {
     UINT nErrorCode;
 
-    if (pWave != NULL) {
-        nErrorCode = SynthDriver.DestroyAudioData(pWave);
-        if (pWave->pData != NULL)
-            free(pWave->pData);
+    if (lpWave != NULL) {
+        nErrorCode = SynthDriver.DestroyAudioData(lpWave);
+        if (lpWave->lpData != NULL)
+            free(lpWave->lpData);
         return nErrorCode;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-UINT AIAPI AWriteAudioData(PAUDIOWAVE pWave, ULONG dwOffset, UINT nCount)
+UINT AIAPI AWriteAudioData(LPAUDIOWAVE lpWave, DWORD dwOffset, UINT nCount)
 {
-    if (pWave != NULL && pWave->pData != NULL) {
+    if (lpWave != NULL && lpWave->lpData != NULL) {
         if (nCount != 0) {
-            return SynthDriver.WriteAudioData(pWave, dwOffset, nCount);
+            return SynthDriver.WriteAudioData(lpWave, dwOffset, nCount);
         }
         return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-UINT AIAPI ACreateAudioVoice(PHAC phVoice)
+UINT AIAPI ACreateAudioVoice(LPHAC lphVoice)
 {
     UINT nVoice;
 
-    if (phVoice != NULL) {
+    if (lphVoice != NULL) {
         for (nVoice = 0; nVoice < nNumVoices; nVoice++) {
             if (!aVoiceTable[nVoice]) {
-                *phVoice = aVoiceTable[nVoice] = (HAC) (nVoice + 1);
+                *lphVoice = aVoiceTable[nVoice] = (HAC) (nVoice + 1);
                 return AUDIO_ERROR_NONE;
             }
         }
@@ -344,22 +365,22 @@ UINT AIAPI ADestroyAudioVoice(HAC hVoice)
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-UINT AIAPI APlayVoice(HAC hVoice, PAUDIOWAVE pWave)
+UINT AIAPI APlayVoice(HAC hVoice, LPAUDIOWAVE lpWave)
 {
     UINT nErrorCode;
 
-    if (pWave != NULL) {
-        if (!(nErrorCode = APrimeVoice(hVoice, pWave)) &&
-            !(nErrorCode = ASetVoiceFrequency(hVoice, pWave->nSampleRate)))
+    if (lpWave != NULL) {
+        if (!(nErrorCode = APrimeVoice(hVoice, lpWave)) &&
+            !(nErrorCode = ASetVoiceFrequency(hVoice, lpWave->nSampleRate)))
             return AStartVoice(hVoice);
         return nErrorCode;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-UINT AIAPI APrimeVoice(HAC hVoice, PAUDIOWAVE pWave)
+UINT AIAPI APrimeVoice(HAC hVoice, LPAUDIOWAVE lpWave)
 {
-    return SynthDriver.PrimeVoice(VOICENUM(hVoice), pWave);
+    return SynthDriver.PrimeVoice(VOICENUM(hVoice), lpWave);
 }
 
 UINT AIAPI AStartVoice(HAC hVoice)
@@ -392,29 +413,29 @@ UINT AIAPI ASetVoicePanning(HAC hVoice, UINT nPanning)
     return SynthDriver.SetVoicePanning(VOICENUM(hVoice), nPanning);
 }
 
-UINT AIAPI AGetVoicePosition(HAC hVoice, PLONG pdwPosition)
+UINT AIAPI AGetVoicePosition(HAC hVoice, LPLONG lpdwPosition)
 {
-    return SynthDriver.GetVoicePosition(VOICENUM(hVoice), pdwPosition);
+    return SynthDriver.GetVoicePosition(VOICENUM(hVoice), lpdwPosition);
 }
 
-UINT AIAPI AGetVoiceFrequency(HAC hVoice, PLONG pdwFrequency)
+UINT AIAPI AGetVoiceFrequency(HAC hVoice, LPLONG lpdwFrequency)
 {
-    return SynthDriver.GetVoiceFrequency(VOICENUM(hVoice), pdwFrequency);
+    return SynthDriver.GetVoiceFrequency(VOICENUM(hVoice), lpdwFrequency);
 }
 
-UINT AIAPI AGetVoiceVolume(HAC hVoice, PUINT pnVolume)
+UINT AIAPI AGetVoiceVolume(HAC hVoice, LPUINT lpnVolume)
 {
-    return SynthDriver.GetVoiceVolume(VOICENUM(hVoice), pnVolume);
+    return SynthDriver.GetVoiceVolume(VOICENUM(hVoice), lpnVolume);
 }
 
-UINT AIAPI AGetVoicePanning(HAC hVoice, PUINT pnPanning)
+UINT AIAPI AGetVoicePanning(HAC hVoice, LPUINT lpnPanning)
 {
-    return SynthDriver.GetVoicePanning(VOICENUM(hVoice), pnPanning);
+    return SynthDriver.GetVoicePanning(VOICENUM(hVoice), lpnPanning);
 }
 
-UINT AIAPI AGetVoiceStatus(HAC hVoice, PBOOL pnStatus)
+UINT AIAPI AGetVoiceStatus(HAC hVoice, LPBOOL lpnStatus)
 {
-    return SynthDriver.GetVoiceStatus(VOICENUM(hVoice), pnStatus);
+    return SynthDriver.GetVoiceStatus(VOICENUM(hVoice), lpnStatus);
 }
 
 
@@ -422,6 +443,13 @@ UINT AIAPI AGetVoiceStatus(HAC hVoice, PBOOL pnStatus)
 /*
  * External system-dependant audio device drivers
  */
+#ifdef __BEOS__
+extern AUDIODRIVER BeOSR3Driver;
+extern AUDIODRIVER BeOSDriver;
+#endif
+#ifdef __OS2__
+extern AUDIODRIVER OS2MMPMDriver;
+#endif
 #ifdef __LINUX__
 extern AUDIODRIVER LinuxDriver;
 #endif
@@ -439,9 +467,12 @@ extern AUDIODRIVER SiliconDriver;
 #endif
 #ifdef __WINDOWS__
 extern AUDIODRIVER WindowsDriver;
+extern AUDIODRIVER DirectSoundDriver;
+extern AUDIODRIVER DirectSoundAccelDriver;
 #endif
 #if defined(__DOS16__) || defined(__DPMI__)
 extern AUDIODRIVER SoundBlasterDriver;
+extern AUDIODRIVER SoundBlaster32Driver;
 extern AUDIODRIVER ProAudioSpectrumDriver;
 extern AUDIODRIVER UltraSoundDriver;
 extern AUDIODRIVER UltraSoundMaxDriver;
@@ -459,6 +490,11 @@ UINT AIAPI AGetVersion(VOID)
 
 UINT AIAPI AInitialize(VOID)
 {
+#ifdef __DJGPP__
+    /* 1998/12/20 lock code and data memory */
+    SEAL_LOCK_MEMORY();
+#endif
+
     /*
      * Initialize all the audio system state variables,
      * and registers all the built-in audio drivers.
@@ -467,6 +503,13 @@ UINT AIAPI AInitialize(VOID)
         return AUDIO_ERROR_NOTSUPPORTED;
 
     ARegisterAudioDriver(&NoneDriver);
+#ifdef __BEOS__
+    ARegisterAudioDriver(&BeOSR3Driver);
+    ARegisterAudioDriver(&BeOSDriver);
+#endif
+#ifdef __OS2__
+    ARegisterAudioDriver(&OS2MMPMDriver);
+#endif
 #ifdef __LINUX__
     ARegisterAudioDriver(&LinuxDriver);
 #endif
@@ -484,9 +527,12 @@ UINT AIAPI AInitialize(VOID)
 #endif
 #ifdef __WINDOWS__
     ARegisterAudioDriver(&WindowsDriver);
+    ARegisterAudioDriver(&DirectSoundAccelDriver);
+    ARegisterAudioDriver(&DirectSoundDriver);
 #endif
 #if defined(__DOS16__) || defined(__DPMI__)
     ARegisterAudioDriver(&SoundBlasterDriver);
+    ARegisterAudioDriver(&SoundBlaster32Driver);
     ARegisterAudioDriver(&ProAudioSpectrumDriver);
     ARegisterAudioDriver(&UltraSoundMaxDriver);
     ARegisterAudioDriver(&UltraSoundDriver);

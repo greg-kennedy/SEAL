@@ -1,16 +1,22 @@
 /*
- * $Id: mixdrv.c 1.9 1996/06/16 00:51:36 chasan released $
+ * $Id: mixdrv.c 1.13 1996/09/08 21:14:54 chasan released $
+ *               1.14 1998/10/24 18:20:53 chasan released (Mixer API)
  *
  * Software-based waveform synthesizer emulator driver.
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #define __FILTER__
 
 #ifdef __GNUC__
 #include <memory.h>
+#define cdecl
 #endif
 #include <string.h>
 #include <malloc.h>
@@ -38,21 +44,21 @@
  * Waveform synthesizer voice structure
  */
 typedef struct {
-    PVOID   pData;
+    LPVOID  lpData;
     LONG    dwAccum;
     LONG    dwFrequency;
     LONG    dwLoopStart;
     LONG    dwLoopEnd;
-    UCHAR   nVolume;
-    UCHAR   nPanning;
-    UCHAR   bControl;
-    UCHAR   bReserved;
-} VOICE, *PVOICE;
+    BYTE    nVolume;
+    BYTE    nPanning;
+    BYTE    bControl;
+    BYTE    bReserved;
+} VOICE, *LPVOICE;
 
 /*
  * Low level voice mixing routine prototype
  */
-typedef VOID (AIAPI* PFNMIXAUDIO)(PLONG, UINT, PVOICE);
+typedef VOID (cdecl* LPFNMIXAUDIO)(LPLONG, UINT, LPVOICE);
 
 /*
  * Waveform synthesizer state structure
@@ -64,463 +70,453 @@ static struct {
     UINT    nSampleRate;
     LONG    dwTimerRate;
     LONG    dwTimerAccum;
-    PUCHAR  pMemoryBlock;
-    PFNAUDIOTIMER pfnAudioTimer;
-    PFNMIXAUDIO pfnMixAudioProc[2];
+    LPBYTE  lpMemory;
+    LPFNAUDIOTIMER lpfnAudioTimer;
+    LPFNMIXAUDIO lpfnMixAudioProc[2];
 } Synth;
 
-#ifndef __MSC__
-PLONG AIAPI pVolumeTable;
-PUCHAR AIAPI pFilterTable;
-#else
-PLONG pVolumeTable;
-PUCHAR pFilterTable;
-#endif
+LPLONG lpVolumeTable;
+LPBYTE lpFilterTable;
 
-static VOID AIAPI UpdateVoices(PUCHAR pData, UINT nCount);
+static VOID AIAPI UpdateVoices(LPBYTE lpData, UINT nCount);
 
 /* low level resamplation and quantization routines */
 #ifdef __ASM__
 
-extern VOID AIAPI QuantAudioData08(PVOID pBuffer, PLONG pData, UINT nCount);
-extern VOID AIAPI QuantAudioData16(PVOID pBuffer, PLONG pData, UINT nCount);
-extern VOID AIAPI MixAudioData08M(PLONG pBuffer, UINT nCount, PVOICE pVoice);
-extern VOID AIAPI MixAudioData08S(PLONG pBuffer, UINT nCount, PVOICE pVoice);
-extern VOID AIAPI MixAudioData08MI(PLONG pBuffer, UINT nCount, PVOICE pVoice);
-extern VOID AIAPI MixAudioData08SI(PLONG pBuffer, UINT nCount, PVOICE pVoice);
-extern VOID AIAPI MixAudioData16M(PLONG pBuffer, UINT nCount, PVOICE pVoice);
-extern VOID AIAPI MixAudioData16S(PLONG pBuffer, UINT nCount, PVOICE pVoice);
-extern VOID AIAPI MixAudioData16MI(PLONG pBuffer, UINT nCount, PVOICE pVoice);
-extern VOID AIAPI MixAudioData16SI(PLONG pBuffer, UINT nCount, PVOICE pVoice);
+VOID cdecl QuantAudioData08(LPVOID lpBuffer, LPLONG lpData, UINT nCount);
+VOID cdecl QuantAudioData16(LPVOID lpBuffer, LPLONG lpData, UINT nCount);
+VOID cdecl MixAudioData08M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
+VOID cdecl MixAudioData08S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
+VOID cdecl MixAudioData08MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
+VOID cdecl MixAudioData08SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
+VOID cdecl MixAudioData16M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
+VOID cdecl MixAudioData16S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
+VOID cdecl MixAudioData16MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
+VOID cdecl MixAudioData16SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice);
 
-static VOID QuantAudioData(PVOID pBuffer, PLONG pData, UINT nCount)
+static VOID QuantAudioData(LPVOID lpBuffer, LPLONG lpData, UINT nCount)
 {
     if (Synth.wFormat & AUDIO_FORMAT_16BITS)
-        QuantAudioData16(pBuffer, pData, nCount);
+	QuantAudioData16(lpBuffer, lpData, nCount);
     else
-        QuantAudioData08(pBuffer, pData, nCount);
+	QuantAudioData08(lpBuffer, lpData, nCount);
 }
 
 #else
 
-static VOID QuantAudioData(PVOID pBuffer, PLONG pData, UINT nCount)
+typedef short SHORT;
+typedef SHORT* LPSHORT;
+
+static VOID QuantAudioData(LPVOID lpBuffer, LPLONG lpData, UINT nCount)
 {
-    PSHORT pwBuffer;
-    PUCHAR pbBuffer;
+    LPSHORT lpwBuffer;
+    LPBYTE lpbBuffer;
     LONG dwSample;
 
     if (Synth.wFormat & AUDIO_FORMAT_16BITS) {
-        pwBuffer = (PSHORT) pBuffer;
-        while (nCount-- > 0) {
-            dwSample = *pData++;
-            if (dwSample < -32768)
-                dwSample = -32768;
-            else if (dwSample > +32767)
-                dwSample = +32767;
-            *pwBuffer++ = (SHORT) dwSample;
-        }
+	lpwBuffer = (LPSHORT) lpBuffer;
+	while (nCount-- > 0) {
+	    dwSample = *lpData++;
+	    if (dwSample < -32768)
+		dwSample = -32768;
+	    else if (dwSample > +32767)
+		dwSample = +32767;
+	    *lpwBuffer++ = (SHORT) dwSample;
+	}
     }
     else {
-        pbBuffer = (PUCHAR) pBuffer;
-        while (nCount-- > 0) {
-            dwSample = *pData++;
-            if (dwSample < -32768)
-                dwSample = -32768;
-            else if (dwSample > +32767)
-                dwSample = +32767;
-            *pbBuffer++ = (UCHAR) ((dwSample >> 8) + 128);
-        }
+	lpbBuffer = (LPBYTE) lpBuffer;
+	while (nCount-- > 0) {
+	    dwSample = *lpData++;
+	    if (dwSample < -32768)
+		dwSample = -32768;
+	    else if (dwSample > +32767)
+		dwSample = +32767;
+	    *lpbBuffer++ = (BYTE) ((dwSample >> 8) + 128);
+	}
     }
 }
 
-static VOID AIAPI MixAudioData08M(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID AIAPI
+MixAudioData08M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register UINT count;
-    register ULONG accum, delta;
-    register PLONG table, buf;
-    register PUCHAR data;
+    register DWORD accum, delta;
+    register LPLONG table, buf;
+    register LPBYTE data;
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    table = pVolumeTable + ((UINT) pVoice->nVolume << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    table = lpVolumeTable + ((UINT) lpVoice->nVolume << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
     count = nCount;
 
     do {
-        *buf++ += table[data[accum >> ACCURACY]];
-        accum += delta;
+	*buf++ += table[data[accum >> ACCURACY]];
+	accum += delta;
     } while (--count != 0);
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
-static VOID AIAPI MixAudioData08S(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+#define min(a, b) ((a) < (b) ? (a) : (b))
+
+static VOID AIAPI
+MixAudioData08S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register UINT a;
-    register ULONG accum, delta;
-    register PLONG ltable, rtable, buf;
-    register PUCHAR data;
+    register DWORD accum, delta;
+    register LPLONG ltable, rtable, buf;
+    register LPBYTE data;
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    a = ((UINT) pVoice->nVolume * pVoice->nPanning) >> 8;
-    rtable = pVolumeTable + (a << 8);
-    ltable = pVolumeTable + ((pVoice->nVolume - a) << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    a = ((UINT) lpVoice->nVolume * lpVoice->nPanning) >> 8;
+    rtable = lpVolumeTable + (a << 8);
+    ltable = lpVolumeTable + ((lpVoice->nVolume - a) << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
 
     do {
-        a = data[accum >> ACCURACY];
-        buf[0] += ltable[a];
-        buf[1] += rtable[a];
-        accum += delta;
-        buf += 2;
+	a = data[accum >> ACCURACY];
+	buf[0] += ltable[a];
+	buf[1] += rtable[a];
+	accum += delta;
+	buf += 2;
     } while (--nCount != 0);
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
-static VOID AIAPI MixAudioData08MI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID AIAPI
+MixAudioData08MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register INT a, frac;
-    register ULONG accum, delta;
-    register PLONG table, buf;
-    register PUCHAR data, ftable;
+    register DWORD accum, delta;
+    register LPLONG table, buf;
+    register LPBYTE data, ftable;
 
     /* adaptive oversampling interpolation comparison */
-    if (pVoice->dwFrequency < -(1 << ACCURACY) ||
-        pVoice->dwFrequency > +(1 << ACCURACY)) {
-        MixAudioData08M(pBuffer, nCount, pVoice);
-        return;
+    if (lpVoice->dwFrequency < -(1 << ACCURACY) ||
+	lpVoice->dwFrequency > +(1 << ACCURACY)) {
+	MixAudioData08M(lpBuffer, nCount, lpVoice);
+	return;
     }
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    table = pVolumeTable + ((UINT) pVoice->nVolume << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    table = lpVolumeTable + ((UINT) lpVoice->nVolume << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
 
 #ifdef __FILTER__
-    a = (UCHAR) pVoice->bReserved;
+    a = (BYTE) lpVoice->bReserved;
     frac = ((long) delta < 0 ? -delta : +delta) >> (ACCURACY - 5);
-    ftable = pFilterTable + (frac << 8);
+    ftable = lpFilterTable + (frac << 8);
     do {
-        a = (UCHAR)(a + ftable[data[accum >> ACCURACY]] - ftable[a]);
-        *buf++ += table[a];
-        accum += delta;
+	a = (BYTE)(a + ftable[data[accum >> ACCURACY]] - ftable[a]);
+	*buf++ += table[a];
+	accum += delta;
     } while (--nCount != 0);
-    pVoice->bReserved = (UCHAR) a;
+    lpVoice->bReserved = (BYTE) a;
 #else
     do {
-        register INT b;
-        a = (signed char) data[accum >> ACCURACY];
-        b = (signed char) data[(accum >> ACCURACY) + 1];
-        frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
-        a = (UCHAR)(a + ((frac * (b - a)) >> 5));
-        *buf++ += table[a];
-        accum += delta;
+	register INT b;
+	a = (signed char) data[accum >> ACCURACY];
+	b = (signed char) data[(accum >> ACCURACY) + 1];
+	frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
+	a = (BYTE)(a + ((frac * (b - a)) >> 5));
+	*buf++ += table[a];
+	accum += delta;
     } while (--nCount != 0);
 #endif
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
-static VOID AIAPI MixAudioData08SI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID AIAPI
+MixAudioData08SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register INT a, frac;
-    register ULONG accum, delta;
-    register PLONG buf, ltable, rtable;
-    register PUCHAR data, ftable;
+    register DWORD accum, delta;
+    register LPLONG buf, ltable, rtable;
+    register LPBYTE data, ftable;
 
     /* adaptive oversampling interpolation comparison */
-    if (pVoice->dwFrequency < -(1 << ACCURACY) ||
-        pVoice->dwFrequency > +(1 << ACCURACY)) {
-        MixAudioData08S(pBuffer, nCount, pVoice);
-        return;
+    if (lpVoice->dwFrequency < -(1 << ACCURACY) ||
+	lpVoice->dwFrequency > +(1 << ACCURACY)) {
+	MixAudioData08S(lpBuffer, nCount, lpVoice);
+	return;
     }
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    a = ((UINT) pVoice->nVolume * pVoice->nPanning) >> 8;
-    rtable = pVolumeTable + (a << 8);
-    ltable = pVolumeTable + ((pVoice->nVolume - a) << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    a = ((UINT) lpVoice->nVolume * lpVoice->nPanning) >> 8;
+    rtable = lpVolumeTable + (a << 8);
+    ltable = lpVolumeTable + ((lpVoice->nVolume - a) << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
 
 #ifdef __FILTER__
-    a = (UCHAR) pVoice->bReserved;
+    a = (BYTE) lpVoice->bReserved;
     frac = ((long) delta < 0 ? -delta : +delta) >> (ACCURACY - 5);
-    ftable = pFilterTable + (frac << 8);
+    ftable = lpFilterTable + (frac << 8);
     do {
-        a = (UCHAR)(a + ftable[data[accum >> ACCURACY]] - ftable[a]);
-        buf[0] += ltable[a];
-        buf[1] += rtable[a];
-        accum += delta;
-        buf += 2;
+	a = (BYTE)(a + ftable[data[accum >> ACCURACY]] - ftable[a]);
+	buf[0] += ltable[a];
+	buf[1] += rtable[a];
+	accum += delta;
+	buf += 2;
     } while (--nCount != 0);
-    pVoice->bReserved = (UCHAR) a;
+    lpVoice->bReserved = (BYTE) a;
 #else
     do {
-        register INT b;
-        a = (signed char) data[accum >> ACCURACY];
-        b = (signed char) data[(accum >> ACCURACY) + 1];
-        frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
-        a = (UCHAR)(a + ((frac * (b - a)) >> 5));
-        buf[0] += ltable[a];
-        buf[1] += rtable[a];
-        accum += delta;
-        buf += 2;
+	register INT b;
+	a = (signed char) data[accum >> ACCURACY];
+	b = (signed char) data[(accum >> ACCURACY) + 1];
+	frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
+	a = (BYTE)(a + ((frac * (b - a)) >> 5));
+	buf[0] += ltable[a];
+	buf[1] += rtable[a];
+	accum += delta;
+	buf += 2;
     } while (--nCount != 0);
 #endif
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
-static VOID AIAPI MixAudioData16M(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID AIAPI
+MixAudioData16M(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register UINT a, count;
-    register ULONG accum, delta;
-    register PLONG table, buf;
-    register PUSHORT data;
+    register DWORD accum, delta;
+    register LPLONG table, buf;
+    register LPWORD data;
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    table = pVolumeTable + ((UINT) pVoice->nVolume << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    table = lpVolumeTable + ((UINT) lpVoice->nVolume << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
     count = nCount;
 
     do {
-        a = data[accum >> ACCURACY];
-#ifndef __16BIT__
-        *buf++ += table[a >> 8] + table[33 * 256 + (a & 0xff)];
-#else
-        *buf++ += table[a >> 8];
-#endif
-        accum += delta;
+	a = data[accum >> ACCURACY];
+	*buf++ += table[a >> 8];
+	accum += delta;
     } while (--count != 0);
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
-static VOID AIAPI MixAudioData16S(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID AIAPI
+MixAudioData16S(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register UINT a;
-    register ULONG accum, delta;
-    register PLONG ltable, rtable, buf;
-    register PUSHORT data;
+    register DWORD accum, delta;
+    register LPLONG ltable, rtable, buf;
+    register LPWORD data;
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    a = ((UINT) pVoice->nVolume * pVoice->nPanning) >> 8;
-    rtable = pVolumeTable + (a << 8);
-    ltable = pVolumeTable + ((pVoice->nVolume - a) << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    a = ((UINT) lpVoice->nVolume * lpVoice->nPanning) >> 8;
+    rtable = lpVolumeTable + (a << 8);
+    ltable = lpVolumeTable + ((lpVoice->nVolume - a) << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
 
     do {
-        a = data[accum >> ACCURACY];
-#ifndef __16BIT__
-        buf[0] += ltable[a >> 8] + ltable[33 * 256 + (a & 0xff)];
-        buf[1] += rtable[a >> 8] + rtable[33 * 256 + (a & 0xff)];
-#else
-        buf[0] += ltable[a >> 8];
-        buf[1] += rtable[a >> 8];
-#endif
-        accum += delta;
-        buf += 2;
+	a = data[accum >> ACCURACY];
+	buf[0] += ltable[a >> 8];
+	buf[1] += rtable[a >> 8];
+	accum += delta;
+	buf += 2;
     } while (--nCount != 0);
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
 
-static VOID AIAPI MixAudioData16MI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID AIAPI
+MixAudioData16MI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register UINT frac, count;
-    register ULONG a, b, accum, delta;
-    register PLONG table, buf;
-    register PUSHORT data;
+    register DWORD a, b, accum, delta;
+    register LPLONG table, buf;
+    register LPWORD data;
 
     /* adaptive oversampling interpolation comparison */
-    if (pVoice->dwFrequency < -(1 << ACCURACY) ||
-        pVoice->dwFrequency > +(1 << ACCURACY)) {
-        MixAudioData16M(pBuffer, nCount, pVoice);
-        return;
+    if (lpVoice->dwFrequency < -(1 << ACCURACY) ||
+	lpVoice->dwFrequency > +(1 << ACCURACY)) {
+	MixAudioData16M(lpBuffer, nCount, lpVoice);
+	return;
     }
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    table = pVolumeTable + ((UINT) pVoice->nVolume << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    table = lpVolumeTable + ((UINT) lpVoice->nVolume << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
     count = nCount;
 
     do {
-        a = data[accum >> ACCURACY];
-        b = data[(accum >> ACCURACY) + 1];
-        frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
-        a = (USHORT)((SHORT)a + ((frac * ((SHORT)b - (SHORT)a)) >> 5));
-#ifndef __16BIT__
-        *buf++ += table[a >> 8] + table[33 * 256 + (a & 0xff)];
-#else
-        *buf++ += table[a >> 8];
-#endif
-        accum += delta;
+	a = data[accum >> ACCURACY];
+	b = data[(accum >> ACCURACY) + 1];
+	frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
+	a = (WORD)((SHORT)a + ((frac * ((SHORT)b - (SHORT)a)) >> 5));
+	*buf++ += table[a >> 8];
+	accum += delta;
     } while (--count != 0);
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
-static VOID AIAPI MixAudioData16SI(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID AIAPI
+MixAudioData16SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     register UINT frac;
-    register ULONG a, b, accum, delta;
-    register PLONG ltable, rtable, buf;
-    register PUSHORT data;
+    register DWORD a, b, accum, delta;
+    register LPLONG ltable, rtable, buf;
+    register LPWORD data;
 
     /* adaptive oversampling interpolation comparison */
-    if (pVoice->dwFrequency < -(1 << ACCURACY) ||
-        pVoice->dwFrequency > +(1 << ACCURACY)) {
-        MixAudioData16S(pBuffer, nCount, pVoice);
-        return;
+    if (lpVoice->dwFrequency < -(1 << ACCURACY) ||
+	lpVoice->dwFrequency > +(1 << ACCURACY)) {
+	MixAudioData16S(lpBuffer, nCount, lpVoice);
+	return;
     }
 
-    accum = pVoice->dwAccum;
-    delta = pVoice->dwFrequency;
-    a = ((UINT) pVoice->nVolume * pVoice->nPanning) >> 8;
-    rtable = pVolumeTable + (a << 8);
-    ltable = pVolumeTable + ((pVoice->nVolume - a) << 8);
-    data = pVoice->pData;
-    buf = pBuffer;
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    a = ((UINT) lpVoice->nVolume * lpVoice->nPanning) >> 8;
+    rtable = lpVolumeTable + (a << 8);
+    ltable = lpVolumeTable + ((lpVoice->nVolume - a) << 8);
+    data = lpVoice->lpData;
+    buf = lpBuffer;
 
     do {
-        a = data[accum >> ACCURACY];
-        b = data[(accum >> ACCURACY) + 1];
-        frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
-        a = (USHORT)((SHORT)a + ((frac * ((int)(SHORT)b - (int)(SHORT)a)) >> 5));
-#ifndef __16BIT__
-        buf[0] += ltable[a >> 8] + ltable[33 * 256 + (a & 0xff)];
-        buf[1] += rtable[a >> 8] + rtable[33 * 256 + (a & 0xff)];
-#else
-        buf[0] += ltable[a >> 8];
-        buf[1] += rtable[a >> 8];
-#endif
-        accum += delta;
-        buf += 2;
+	a = data[accum >> ACCURACY];
+	b = data[(accum >> ACCURACY) + 1];
+	frac = (accum & ((1 << ACCURACY) - 1)) >> (ACCURACY - 5);
+	a = (WORD)((SHORT)a + ((frac * ((int)(SHORT)b - (int)(SHORT)a)) >> 5));
+	buf[0] += ltable[a >> 8];
+	buf[1] += rtable[a >> 8];
+	accum += delta;
+	buf += 2;
     } while (--nCount != 0);
 
-    pVoice->dwAccum = accum;
+    lpVoice->dwAccum = accum;
 }
 
 #endif
 
-static VOID MixAudioData(PLONG pBuffer, UINT nCount, PVOICE pVoice)
+static VOID MixAudioData(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     UINT nSize;
 
     if (Synth.wFormat & AUDIO_FORMAT_STEREO)
-        nCount >>= 1;
+	nCount >>= 1;
 
-    while (nCount > 0 && !(pVoice->bControl & VOICE_STOP)) {
-        /* check boundary conditions */
-        if (pVoice->bControl & VOICE_REVERSE) {
-            if (pVoice->dwAccum < pVoice->dwLoopStart) {
-                if (pVoice->bControl & VOICE_BIDILOOP) {
-                    pVoice->dwAccum = pVoice->dwLoopStart +
-                        (pVoice->dwLoopStart - pVoice->dwAccum);
-                    pVoice->bControl ^= VOICE_REVERSE;
-                    continue;
-                }
-                else if (pVoice->bControl & VOICE_LOOP) {
-                    pVoice->dwAccum = pVoice->dwLoopEnd -
-                        (pVoice->dwLoopStart - pVoice->dwAccum);
-                    continue;
-                }
-                else {
-                    pVoice->bControl |= VOICE_STOP;
-                    break;
-                }
-            }
-        }
-        else {
-            if (pVoice->dwAccum > pVoice->dwLoopEnd) {
-                if (pVoice->bControl & VOICE_BIDILOOP) {
-                    pVoice->dwAccum = pVoice->dwLoopEnd -
-                        (pVoice->dwAccum - pVoice->dwLoopEnd);
-                    pVoice->bControl ^= VOICE_REVERSE;
-                    continue;
-                }
-                else if (pVoice->bControl & VOICE_LOOP) {
-                    pVoice->dwAccum = pVoice->dwLoopStart +
-                        (pVoice->dwAccum - pVoice->dwLoopEnd);
-                    continue;
-                }
-                else {
-                    pVoice->bControl |= VOICE_STOP;
-                    break;
-                }
-            }
-        }
+    while (nCount > 0 && !(lpVoice->bControl & VOICE_STOP)) {
+	/* check boundary conditions */
+	if (lpVoice->bControl & VOICE_REVERSE) {
+	    if (lpVoice->dwAccum < lpVoice->dwLoopStart) {
+		if (lpVoice->bControl & VOICE_BIDILOOP) {
+		    lpVoice->dwAccum = lpVoice->dwLoopStart +
+			(lpVoice->dwLoopStart - lpVoice->dwAccum);
+		    lpVoice->bControl ^= VOICE_REVERSE;
+		    continue;
+		}
+		else if (lpVoice->bControl & VOICE_LOOP) {
+		    lpVoice->dwAccum = lpVoice->dwLoopEnd -
+			(lpVoice->dwLoopStart - lpVoice->dwAccum);
+		    continue;
+		}
+		else {
+		    lpVoice->bControl |= VOICE_STOP;
+		    break;
+		}
+	    }
+	}
+	else {
+	    if (lpVoice->dwAccum > lpVoice->dwLoopEnd) {
+		if (lpVoice->bControl & VOICE_BIDILOOP) {
+		    lpVoice->dwAccum = lpVoice->dwLoopEnd -
+			(lpVoice->dwAccum - lpVoice->dwLoopEnd);
+		    lpVoice->bControl ^= VOICE_REVERSE;
+		    continue;
+		}
+		else if (lpVoice->bControl & VOICE_LOOP) {
+		    lpVoice->dwAccum = lpVoice->dwLoopStart +
+			(lpVoice->dwAccum - lpVoice->dwLoopEnd);
+		    continue;
+		}
+		else {
+		    lpVoice->bControl |= VOICE_STOP;
+		    break;
+		}
+	    }
+	}
 
-        /* check for overflow and clip if necessary */
-        nSize = nCount;
-        if (pVoice->bControl & VOICE_REVERSE) {
-            if (nSize * pVoice->dwFrequency >
-                pVoice->dwAccum - pVoice->dwLoopStart)
-                nSize = (pVoice->dwAccum - pVoice->dwLoopStart +
-                    pVoice->dwFrequency) / pVoice->dwFrequency;
-        }
-        else {
-            if (nSize * pVoice->dwFrequency >
-                pVoice->dwLoopEnd - pVoice->dwAccum)
-                nSize = (pVoice->dwLoopEnd - pVoice->dwAccum +
-                    pVoice->dwFrequency) / pVoice->dwFrequency;
-        }
+	/* check for overflow and clip if necessary */
+	nSize = nCount;
+	if (lpVoice->bControl & VOICE_REVERSE) {
+	    if (nSize * lpVoice->dwFrequency >
+		lpVoice->dwAccum - lpVoice->dwLoopStart)
+		nSize = (lpVoice->dwAccum - lpVoice->dwLoopStart +
+			 lpVoice->dwFrequency) / lpVoice->dwFrequency;
+	}
+	else {
+	    if (nSize * lpVoice->dwFrequency >
+		lpVoice->dwLoopEnd - lpVoice->dwAccum)
+		nSize = (lpVoice->dwLoopEnd - lpVoice->dwAccum +
+			 lpVoice->dwFrequency) / lpVoice->dwFrequency;
+	}
 
-        if (pVoice->bControl & VOICE_REVERSE)
-            pVoice->dwFrequency = -pVoice->dwFrequency;
+	if (lpVoice->bControl & VOICE_REVERSE)
+	    lpVoice->dwFrequency = -lpVoice->dwFrequency;
 
-        /* mixes chunk of data in a burst mode */
-        if (pVoice->bControl & VOICE_16BITS) {
-            Synth.pfnMixAudioProc[1] (pBuffer, nSize, pVoice);
-        }
-        else {
-            Synth.pfnMixAudioProc[0] (pBuffer, nSize, pVoice);
-        }
+	/* mixes chunk of data in a burst mode */
+	if (lpVoice->bControl & VOICE_16BITS) {
+	    Synth.lpfnMixAudioProc[1] (lpBuffer, nSize, lpVoice);
+	}
+	else {
+	    Synth.lpfnMixAudioProc[0] (lpBuffer, nSize, lpVoice);
+	}
 
-        if (pVoice->bControl & VOICE_REVERSE)
-            pVoice->dwFrequency = -pVoice->dwFrequency;
+	if (lpVoice->bControl & VOICE_REVERSE)
+	    lpVoice->dwFrequency = -lpVoice->dwFrequency;
 
-        /* update mixing buffer address and counter */
-        pBuffer += nSize;
-        if (Synth.wFormat & AUDIO_FORMAT_STEREO)
-            pBuffer += nSize;
-        nCount -= nSize;
+	/* update mixing buffer address and counter */
+	lpBuffer += nSize;
+	if (Synth.wFormat & AUDIO_FORMAT_STEREO)
+	    lpBuffer += nSize;
+	nCount -= nSize;
     }
 }
 
-static VOID MixAudioVoices(PLONG pBuffer, UINT nCount)
+static VOID MixAudioVoices(LPLONG lpBuffer, UINT nCount)
 {
     UINT nVoice, nSize;
 
     while (nCount > 0) {
-        nSize = nCount;
-        if (Synth.pfnAudioTimer != NULL) {
-            nSize = (Synth.dwTimerRate - Synth.dwTimerAccum + 64L) & ~63L;
-            if (nSize > nCount)
-                nSize = nCount;
-            if ((Synth.dwTimerAccum += nSize) >= Synth.dwTimerRate) {
-                Synth.dwTimerAccum -= Synth.dwTimerRate;
-                Synth.pfnAudioTimer();
-            }
-        }
-        for (nVoice = 0; nVoice < Synth.nVoices; nVoice++) {
-            MixAudioData(pBuffer, nSize, &Synth.aVoices[nVoice]);
-        }
-        pBuffer += nSize;
-        nCount -= nSize;
+	nSize = nCount;
+	if (Synth.lpfnAudioTimer != NULL) {
+	    nSize = (Synth.dwTimerRate - Synth.dwTimerAccum + 64L) & ~63L;
+	    if (nSize > nCount)
+		nSize = nCount;
+	    if ((Synth.dwTimerAccum += nSize) >= Synth.dwTimerRate) {
+		Synth.dwTimerAccum -= Synth.dwTimerRate;
+		Synth.lpfnAudioTimer();
+	    }
+	}
+	for (nVoice = 0; nVoice < Synth.nVoices; nVoice++) {
+	    MixAudioData(lpBuffer, nSize, &Synth.aVoices[nVoice]);
+	}
+	lpBuffer += nSize;
+	nCount -= nSize;
     }
 }
 
@@ -528,9 +524,9 @@ static VOID MixAudioVoices(PLONG pBuffer, UINT nCount)
 /*
  * High level waveform synthesizer interface
  */
-static UINT AIAPI GetAudioCaps(PAUDIOCAPS pCaps)
+static UINT AIAPI GetAudioCaps(LPAUDIOCAPS lpCaps)
 {
-    memset(pCaps, 0, sizeof(AUDIOCAPS));
+    memset(lpCaps, 0, sizeof(AUDIOCAPS));
     return AUDIO_ERROR_NOTSUPPORTED;
 }
 
@@ -539,72 +535,88 @@ static UINT AIAPI PingAudio(VOID)
     return AUDIO_ERROR_NOTSUPPORTED;
 }
 
-static UINT AIAPI OpenAudio(PAUDIOINFO pInfo)
+static UINT AIAPI OpenAudio(LPAUDIOINFO lpInfo)
 {
-    PUCHAR pFilter;
-    PLONG pVolume;
-    UINT nVolume, nSample;
-
     memset(&Synth, 0, sizeof(Synth));
-    Synth.wFormat = pInfo->wFormat;
-    Synth.nSampleRate = pInfo->nSampleRate;
+    Synth.wFormat = lpInfo->wFormat;
+    Synth.nSampleRate = lpInfo->nSampleRate;
     if (Synth.wFormat & AUDIO_FORMAT_FILTER) {
-        Synth.pfnMixAudioProc[0] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
-            MixAudioData08SI : MixAudioData08MI;
-        Synth.pfnMixAudioProc[1] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
-            MixAudioData16SI : MixAudioData16MI;
+	Synth.lpfnMixAudioProc[0] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
+	    MixAudioData08SI : MixAudioData08MI;
+	Synth.lpfnMixAudioProc[1] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
+	    MixAudioData16SI : MixAudioData16MI;
     }
     else {
-        Synth.pfnMixAudioProc[0] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
-            MixAudioData08S : MixAudioData08M;
-        Synth.pfnMixAudioProc[1] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
-            MixAudioData16S : MixAudioData16M;
+	Synth.lpfnMixAudioProc[0] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
+	    MixAudioData08S : MixAudioData08M;
+	Synth.lpfnMixAudioProc[1] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
+	    MixAudioData16S : MixAudioData16M;
     }
 
-#if !defined(__16BIT__) && !defined(__ASM__)
-    if ((Synth.pMemoryBlock = malloc(2 * 33 * 4 * 256 + 32 * 256 + 1023)) != NULL) {
-#else
-    if ((Synth.pMemoryBlock = malloc(33 * 4 * 256 + 32 * 256 + 1023)) != NULL) {
-#endif
-#ifdef __ASM__
-        pVolumeTable = (PLONG) (((ULONG) Synth.pMemoryBlock + 1023) & ~1023);
-#else
-        pVolumeTable = (PLONG) Synth.pMemoryBlock;
-#endif
-        pVolume = pVolumeTable;
-        for (nVolume = 0; nVolume <= 32; nVolume++) {
-            for (nSample = 0; nSample <= 255; nSample++) {
-                *pVolume++ = (nVolume * (LONG)((signed char) nSample)) << 1;
-            }
-        }
-#if !defined(__16BIT__) && !defined(__ASM__)
-        for (nVolume = 0; nVolume <= 32; nVolume++) {
-            for (nSample = 0; nSample <= 255; nSample++) {
-                *pVolume++ = (nVolume * (LONG)((unsigned char) nSample)) >> 7;
-            }
-        }
-#endif
-
-#ifdef __FILTER__
-        pFilterTable = pFilter = (PUCHAR) pVolume;
-        for (nVolume = 0; nVolume < 32; nVolume++) {
-            for (nSample = 0; nSample <= 255; nSample++) {
-                *pFilter++ = (nVolume * (int)((signed char) nSample)) >> 5;
-            }
-        }
-#endif
-
-        ASetAudioCallback(UpdateVoices);
-        return AUDIO_ERROR_NONE;
+    /* allocate volume (0-64) and filter (0-31) table */
+    Synth.lpMemory = malloc(sizeof(LONG) * 65 * 256 +
+			    sizeof(BYTE) * 32 * 256 + 1023);
+    if (Synth.lpMemory != NULL) {
+	lpVolumeTable = (LPLONG) (((DWORD) Synth.lpMemory + 1023) & ~1023);
+	lpFilterTable = (LPBYTE) (lpVolumeTable + 65 * 256);
+	ASetAudioMixerValue(AUDIO_MIXER_MASTER_VOLUME, 96);
+	ASetAudioCallback(UpdateVoices);
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_NOMEMORY;
 }
 
 static UINT AIAPI CloseAudio(VOID)
 {
-    if (Synth.pMemoryBlock != NULL)
-        free(Synth.pMemoryBlock);
+    if (Synth.lpMemory != NULL)
+	free(Synth.lpMemory);
     memset(&Synth, 0, sizeof(Synth));
+    return AUDIO_ERROR_NONE;
+}
+
+static UINT AIAPI SetAudioMixerValue(UINT nChannel, UINT nMixerValue)
+{
+    LPBYTE lpFilter;
+    LPLONG lpVolume;
+    UINT nVolume, nSample;
+    LONG dwAccum, dwDelta;
+
+    if (Synth.lpMemory == NULL)
+	return AUDIO_ERROR_NOTSUPPORTED;
+
+    /* master volume must be less than 256 units */
+    if (nChannel != AUDIO_MIXER_MASTER_VOLUME || nMixerValue > 256)
+	return AUDIO_ERROR_INVALPARAM;
+
+    /* half dynamic range for mono output */
+    if (!(Synth.wFormat & AUDIO_FORMAT_STEREO))
+	nMixerValue >>= 1;
+
+    /* build volume table (0-64) */
+    lpVolume = lpVolumeTable;
+    dwDelta = 0;
+    for (nVolume = 0; nVolume <= 64; nVolume++, dwDelta += nMixerValue) {
+	dwAccum = 0;
+	for (nSample = 0; nSample < 128; nSample++, dwAccum += dwDelta)
+	    *lpVolume++ = dwAccum >> 4;
+	dwAccum = -dwAccum;
+	for (nSample = 0; nSample < 128; nSample++, dwAccum += dwDelta)
+	    *lpVolume++ = dwAccum >> 4;
+    }
+
+#ifdef __FILTER__
+    /* build lowpass filter table (0-31) */
+    lpFilter = lpFilterTable;
+    for (nVolume = 0; nVolume < 32; nVolume++) {
+	dwAccum = 0;
+	for (nSample = 0; nSample < 128; nSample++, dwAccum += nVolume)
+	    *lpFilter++ = dwAccum >> 5;
+	dwAccum = -dwAccum;
+	for (nSample = 0; nSample < 128; nSample++, dwAccum += nVolume)
+	    *lpFilter++ = dwAccum >> 5;
+    }
+#endif
+
     return AUDIO_ERROR_NONE;
 }
 
@@ -615,11 +627,11 @@ static UINT AIAPI OpenVoices(UINT nVoices)
     /*
      * Initialize waveform synthesizer structure for playback
      */
-    if (nVoices < AUDIO_MAX_VOICES) {
-        Synth.nVoices = nVoices;
-        for (nVoice = 0; nVoice < Synth.nVoices; nVoice++)
-            Synth.aVoices[nVoice].bControl = VOICE_STOP;
-        return AUDIO_ERROR_NONE;
+    if (nVoices >= 1 && nVoices <= AUDIO_MAX_VOICES) {
+	Synth.nVoices = nVoices;
+	for (nVoice = 0; nVoice < Synth.nVoices; nVoice++)
+	    Synth.aVoices[nVoice].bControl = VOICE_STOP;
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALPARAM;
 }
@@ -630,7 +642,7 @@ static UINT AIAPI CloseVoices(VOID)
 
     memset(Synth.aVoices, 0, sizeof(Synth.aVoices));
     for (nVoice = 0; nVoice < AUDIO_MAX_VOICES; nVoice++)
-        Synth.aVoices[nVoice].bControl = VOICE_STOP;
+	Synth.aVoices[nVoice].bControl = VOICE_STOP;
     return AUDIO_ERROR_NONE;
 }
 
@@ -639,76 +651,73 @@ static UINT AIAPI UpdateAudio(VOID)
     return AUDIO_ERROR_NONE;
 }
 
-static LONG AIAPI GetAudioMemAvail(VOID)
+static LONG AIAPI GetAudioDataAvail(VOID)
 {
     return 0;
 }
 
-static UINT AIAPI CreateAudioData(PAUDIOWAVE pWave)
+static UINT AIAPI CreateAudioData(LPAUDIOWAVE lpWave)
 {
-    if (pWave != NULL) {
-        pWave->dwHandle = (ULONG) pWave->pData;
-        return AUDIO_ERROR_NONE;
+    if (lpWave != NULL) {
+	lpWave->dwHandle = (DWORD) lpWave->lpData;
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI DestroyAudioData(PAUDIOWAVE pWave)
+static UINT AIAPI DestroyAudioData(LPAUDIOWAVE lpWave)
 {
-    if (pWave != NULL && pWave->dwHandle != 0) {
-        return AUDIO_ERROR_NONE;
+    if (lpWave != NULL && lpWave->dwHandle != 0) {
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI WriteAudioData(PAUDIOWAVE pWave, ULONG dwOffset, UINT nCount)
+static UINT AIAPI WriteAudioData(LPAUDIOWAVE lpWave, DWORD dwOffset, UINT nCount)
 {
-    if (pWave != NULL && pWave->dwHandle != 0) {
-        /* anticlick removal work around */
-        if (pWave->wFormat & AUDIO_FORMAT_LOOP) {
-            if (dwOffset <= pWave->dwLoopEnd &&
-                dwOffset + nCount >= pWave->dwLoopEnd) {
-                *(PULONG) (pWave->dwHandle + pWave->dwLoopEnd) =
-                    *(PULONG) (pWave->dwHandle + pWave->dwLoopStart);
-            }
-        }
-        else if (dwOffset + nCount >= pWave->dwLength) {
-            *(PULONG) (pWave->dwHandle + pWave->dwLength) = 0;
-        }
-        return AUDIO_ERROR_NONE;
+    if (lpWave != NULL && lpWave->dwHandle != 0) {
+	/* anticlick removal work around */
+	if (lpWave->wFormat & AUDIO_FORMAT_LOOP) {
+	    *(LPDWORD) (lpWave->dwHandle + lpWave->dwLoopEnd) =
+		*(LPDWORD) (lpWave->dwHandle + lpWave->dwLoopStart);
+	}
+	else if (dwOffset + nCount >= lpWave->dwLength) {
+	    *(LPDWORD) (lpWave->dwHandle + lpWave->dwLength) = 0;
+	}
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI PrimeVoice(UINT nVoice, PAUDIOWAVE pWave)
+static UINT AIAPI PrimeVoice(UINT nVoice, LPAUDIOWAVE lpWave)
 {
-    PVOICE pVoice;
+    LPVOICE lpVoice;
 
-    if (nVoice < Synth.nVoices && pWave != NULL && pWave->dwHandle != 0) {
-        pVoice = &Synth.aVoices[nVoice];
-        pVoice->pData = (PVOID) pWave->dwHandle;
-        pVoice->bControl = VOICE_STOP;
-        pVoice->dwAccum = 0;
-        if (pWave->wFormat & (AUDIO_FORMAT_LOOP | AUDIO_FORMAT_BIDILOOP)) {
-            pVoice->dwLoopStart = pWave->dwLoopStart;
-            pVoice->dwLoopEnd = pWave->dwLoopEnd;
-            pVoice->bControl |= VOICE_LOOP;
-            if (pWave->wFormat & AUDIO_FORMAT_BIDILOOP)
-                pVoice->bControl |= VOICE_BIDILOOP;
-        }
-        else {
-            pVoice->dwLoopStart = pWave->dwLength;
-            pVoice->dwLoopEnd = pWave->dwLength;
-        }
-        if (pWave->wFormat & AUDIO_FORMAT_16BITS) {
-            pVoice->dwLoopStart >>= 1;
-            pVoice->dwLoopEnd >>= 1;
-            pVoice->bControl |= VOICE_16BITS;
-        }
-        pVoice->dwAccum <<= ACCURACY;
-        pVoice->dwLoopStart <<= ACCURACY;
-        pVoice->dwLoopEnd <<= ACCURACY;
-        return AUDIO_ERROR_NONE;
+    if (nVoice < Synth.nVoices && lpWave != NULL && lpWave->dwHandle != 0) {
+	lpVoice = &Synth.aVoices[nVoice];
+	lpVoice->lpData = (LPVOID) lpWave->dwHandle;
+	lpVoice->bControl = VOICE_STOP;
+	lpVoice->dwAccum = 0;
+	if (lpWave->wFormat & (AUDIO_FORMAT_LOOP | AUDIO_FORMAT_BIDILOOP)) {
+	    lpVoice->dwLoopStart = lpWave->dwLoopStart;
+	    lpVoice->dwLoopEnd = lpWave->dwLoopEnd;
+	    lpVoice->bControl |= VOICE_LOOP;
+	    if (lpWave->wFormat & AUDIO_FORMAT_BIDILOOP)
+		lpVoice->bControl |= VOICE_BIDILOOP;
+	}
+	else {
+	    lpVoice->dwLoopStart = lpWave->dwLength;
+	    lpVoice->dwLoopEnd = lpWave->dwLength;
+	}
+	if (lpWave->wFormat & AUDIO_FORMAT_16BITS) {
+	    lpVoice->dwLoopStart >>= 1;
+	    lpVoice->dwLoopEnd >>= 1;
+	    lpVoice->bControl |= VOICE_16BITS;
+	}
+	lpVoice->dwAccum <<= ACCURACY;
+	lpVoice->dwLoopStart <<= ACCURACY;
+	lpVoice->dwLoopEnd <<= ACCURACY;
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
@@ -716,8 +725,8 @@ static UINT AIAPI PrimeVoice(UINT nVoice, PAUDIOWAVE pWave)
 static UINT AIAPI StartVoice(UINT nVoice)
 {
     if (nVoice < Synth.nVoices) {
-        Synth.aVoices[nVoice].bControl &= ~VOICE_STOP;
-        return AUDIO_ERROR_NONE;
+	Synth.aVoices[nVoice].bControl &= ~VOICE_STOP;
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
@@ -725,8 +734,8 @@ static UINT AIAPI StartVoice(UINT nVoice)
 static UINT AIAPI StopVoice(UINT nVoice)
 {
     if (nVoice < Synth.nVoices) {
-        Synth.aVoices[nVoice].bControl |= VOICE_STOP;
-        return AUDIO_ERROR_NONE;
+	Synth.aVoices[nVoice].bControl |= VOICE_STOP;
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALHANDLE;
 
@@ -735,12 +744,12 @@ static UINT AIAPI StopVoice(UINT nVoice)
 static UINT AIAPI SetVoicePosition(UINT nVoice, LONG dwPosition)
 {
     if (nVoice < Synth.nVoices) {
-        dwPosition <<= ACCURACY;
-        if (dwPosition >= 0 && dwPosition < Synth.aVoices[nVoice].dwLoopEnd) {
-            Synth.aVoices[nVoice].dwAccum = dwPosition;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	dwPosition <<= ACCURACY;
+	if (dwPosition >= 0 && dwPosition < Synth.aVoices[nVoice].dwLoopEnd) {
+	    Synth.aVoices[nVoice].dwAccum = dwPosition;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
@@ -748,13 +757,13 @@ static UINT AIAPI SetVoicePosition(UINT nVoice, LONG dwPosition)
 static UINT AIAPI SetVoiceFrequency(UINT nVoice, LONG dwFrequency)
 {
     if (nVoice < Synth.nVoices) {
-        if (dwFrequency >= AUDIO_MIN_FREQUENCY &&
-            dwFrequency <= AUDIO_MAX_FREQUENCY) {
-            Synth.aVoices[nVoice].dwFrequency = ((dwFrequency << ACCURACY) +
-                (Synth.nSampleRate >> 1)) / Synth.nSampleRate;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (dwFrequency >= AUDIO_MIN_FREQUENCY &&
+	    dwFrequency <= AUDIO_MAX_FREQUENCY) {
+	    Synth.aVoices[nVoice].dwFrequency = ((dwFrequency << ACCURACY) +
+						 (Synth.nSampleRate >> 1)) / Synth.nSampleRate;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
@@ -762,11 +771,11 @@ static UINT AIAPI SetVoiceFrequency(UINT nVoice, LONG dwFrequency)
 static UINT AIAPI SetVoiceVolume(UINT nVoice, UINT nVolume)
 {
     if (nVoice < Synth.nVoices) {
-        if (nVolume <= AUDIO_MAX_VOLUME) {
-            Synth.aVoices[nVoice].nVolume = nVolume >> 1;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (nVolume <= AUDIO_MAX_VOLUME) {
+	    Synth.aVoices[nVoice].nVolume = nVolume >> 1;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
@@ -774,109 +783,109 @@ static UINT AIAPI SetVoiceVolume(UINT nVoice, UINT nVolume)
 static UINT AIAPI SetVoicePanning(UINT nVoice, UINT nPanning)
 {
     if (nVoice < Synth.nVoices) {
-        if (nPanning <= AUDIO_MAX_PANNING) {
-            Synth.aVoices[nVoice].nPanning = nPanning;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (nPanning <= AUDIO_MAX_PANNING) {
+	    Synth.aVoices[nVoice].nPanning = nPanning;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoicePosition(UINT nVoice, PLONG pdwPosition)
+static UINT AIAPI GetVoicePosition(UINT nVoice, LPLONG lpdwPosition)
 {
     if (nVoice < Synth.nVoices) {
-        if (pdwPosition != NULL) {
-            *pdwPosition = Synth.aVoices[nVoice].dwAccum >> ACCURACY;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (lpdwPosition != NULL) {
+	    *lpdwPosition = Synth.aVoices[nVoice].dwAccum >> ACCURACY;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoiceFrequency(UINT nVoice, PLONG pdwFrequency)
+static UINT AIAPI GetVoiceFrequency(UINT nVoice, LPLONG lpdwFrequency)
 {
     if (nVoice < Synth.nVoices) {
-        if (pdwFrequency != NULL) {
-            *pdwFrequency = (Synth.aVoices[nVoice].dwFrequency *
-                Synth.nSampleRate) >> ACCURACY;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (lpdwFrequency != NULL) {
+	    *lpdwFrequency = (Synth.aVoices[nVoice].dwFrequency *
+			      Synth.nSampleRate) >> ACCURACY;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoiceVolume(UINT nVoice, PUINT pnVolume)
+static UINT AIAPI GetVoiceVolume(UINT nVoice, LPUINT lpnVolume)
 {
     if (nVoice < Synth.nVoices) {
-        if (pnVolume != NULL) {
-            *pnVolume = Synth.aVoices[nVoice].nVolume << 1;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (lpnVolume != NULL) {
+	    *lpnVolume = Synth.aVoices[nVoice].nVolume << 1;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoicePanning(UINT nVoice, PUINT pnPanning)
+static UINT AIAPI GetVoicePanning(UINT nVoice, LPUINT lpnPanning)
 {
     if (nVoice < Synth.nVoices) {
-        if (pnPanning != NULL) {
-            *pnPanning = Synth.aVoices[nVoice].nPanning;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (lpnPanning != NULL) {
+	    *lpnPanning = Synth.aVoices[nVoice].nPanning;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI GetVoiceStatus(UINT nVoice, PBOOL pnStatus)
+static UINT AIAPI GetVoiceStatus(UINT nVoice, LPBOOL lpnStatus)
 {
     if (nVoice < Synth.nVoices) {
-        if (pnStatus != NULL) {
-            *pnStatus = (Synth.aVoices[nVoice].bControl & VOICE_STOP) != 0;
-            return AUDIO_ERROR_NONE;
-        }
-        return AUDIO_ERROR_INVALPARAM;
+	if (lpnStatus != NULL) {
+	    *lpnStatus = (Synth.aVoices[nVoice].bControl & VOICE_STOP) != 0;
+	    return AUDIO_ERROR_NONE;
+	}
+	return AUDIO_ERROR_INVALPARAM;
     }
     return AUDIO_ERROR_INVALHANDLE;
 }
 
-static UINT AIAPI SetAudioTimerProc(PFNAUDIOTIMER pfnAudioTimer)
+static UINT AIAPI SetAudioTimerProc(LPFNAUDIOTIMER lpfnAudioTimer)
 {
-    Synth.pfnAudioTimer = pfnAudioTimer;
+    Synth.lpfnAudioTimer = lpfnAudioTimer;
     return AUDIO_ERROR_NONE;
 }
 
 static UINT AIAPI SetAudioTimerRate(UINT nBPM)
 {
     if (nBPM >= 0x20 && nBPM <= 0xFF) {
-        Synth.dwTimerRate = Synth.nSampleRate;
-        if (Synth.wFormat & AUDIO_FORMAT_STEREO)
-            Synth.dwTimerRate <<= 1;
-        Synth.dwTimerRate = (5 * Synth.dwTimerRate) / (2 * nBPM);
-        return AUDIO_ERROR_NONE;
+	Synth.dwTimerRate = Synth.nSampleRate;
+	if (Synth.wFormat & AUDIO_FORMAT_STEREO)
+	    Synth.dwTimerRate <<= 1;
+	Synth.dwTimerRate = (5 * Synth.dwTimerRate) / (2 * nBPM);
+	return AUDIO_ERROR_NONE;
     }
     return AUDIO_ERROR_INVALPARAM;
 }
 
-static VOID AIAPI UpdateVoices(PUCHAR pData, UINT nCount)
+static VOID AIAPI UpdateVoices(LPBYTE lpData, UINT nCount)
 {
     static LONG aBuffer[BUFFERSIZE];
     UINT nSamples;
 
     if (Synth.wFormat & AUDIO_FORMAT_16BITS)
-        nCount >>= 1;
+	nCount >>= 1;
     while (nCount > 0) {
-        if ((nSamples = nCount) > BUFFERSIZE)
-            nSamples = BUFFERSIZE;
-        memset(aBuffer, 0, nSamples << 2);
-        MixAudioVoices(aBuffer, nSamples);
-        QuantAudioData(pData, aBuffer, nSamples);
-        pData += nSamples << ((Synth.wFormat & AUDIO_FORMAT_16BITS) != 0);
-        nCount -= nSamples;
+	if ((nSamples = nCount) > BUFFERSIZE)
+	    nSamples = BUFFERSIZE;
+	memset(aBuffer, 0, nSamples << 2);
+	MixAudioVoices(aBuffer, nSamples);
+	QuantAudioData(lpData, aBuffer, nSamples);
+	lpData += nSamples << ((Synth.wFormat & AUDIO_FORMAT_16BITS) != 0);
+	nCount -= nSamples;
     }
 }
 
@@ -888,8 +897,8 @@ AUDIOSYNTHDRIVER EmuSynthDriver =
 {
     GetAudioCaps, PingAudio, OpenAudio, CloseAudio,
     UpdateAudio, OpenVoices, CloseVoices,
-    SetAudioTimerProc, SetAudioTimerRate,
-    GetAudioMemAvail, CreateAudioData, DestroyAudioData,
+    SetAudioTimerProc, SetAudioTimerRate, SetAudioMixerValue,
+    GetAudioDataAvail, CreateAudioData, DestroyAudioData,
     WriteAudioData, PrimeVoice, StartVoice, StopVoice,
     SetVoicePosition, SetVoiceFrequency, SetVoiceVolume,
     SetVoicePanning, GetVoicePosition, GetVoiceFrequency,

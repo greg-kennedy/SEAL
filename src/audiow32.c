@@ -1,10 +1,15 @@
 /*
- * $Id: audiow32.c 1.5 1996/06/02 19:04:30 chasan released $
+ * $Id: audiow32.c 1.7 1996/09/20 23:55:38 chasan released $
+ *                 1.8 1998/12/24 15:07:30 chasan released (NT fix)
  *
  * Win32 dynamic-link library entry point routine
  *
- * Copyright (C) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (C) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <windows.h>
@@ -12,7 +17,7 @@
 
 #ifdef WIN32
 
-#define UPDATE_AUDIO_PERIOD 45  /* thread period in milliseconds */
+#define AUDIO_UPDATE_LATENCY 10  /* audio latency in milliseconds */
 
 static HANDLE hThread;
 static DWORD nThreadId;
@@ -20,16 +25,14 @@ static BOOL bTerminate;
 
 DWORD WINAPI UpdateAudioThread(LPVOID lpThreadParameter)
 {
-    DWORD dwTickCount, dwCurrentTickCount, dwOverload;
-
-    dwTickCount = GetTickCount();
-    for (dwOverload = 0; dwOverload < 128 && !bTerminate; dwOverload++) {
+    LONG dwAudioTime, dwSleepTime;
+    
+    dwAudioTime = GetTickCount();
+    while (!bTerminate) {
         AUpdateAudio();
-        dwCurrentTickCount = GetTickCount();
-        if ((dwTickCount += UPDATE_AUDIO_PERIOD) > dwCurrentTickCount) {
-            dwOverload = 0;
-            Sleep(dwTickCount - dwCurrentTickCount);
-        }
+        dwAudioTime += AUDIO_UPDATE_LATENCY;
+        if ((dwSleepTime = dwAudioTime - GetTickCount()) > 0)
+	    Sleep(dwSleepTime);
     }
     return (lpThreadParameter != NULL);
 }
@@ -38,10 +41,10 @@ DWORD WINAPI UpdateAudioThread(LPVOID lpThreadParameter)
 
 #ifdef __MSC__
 BOOL WINAPI DllMain(HINSTANCE hinstDLL,
-    DWORD fdwReason, LPVOID lpvReserved)
+		    DWORD fdwReason, LPVOID lpvReserved)
 #else
-BOOL WINAPI DllEntryPoint(HINSTANCE hinstDLL,
-    DWORD fdwReason, LPVOID lpvReserved)
+    BOOL WINAPI DllEntryPoint(HINSTANCE hinstDLL,
+			      DWORD fdwReason, LPVOID lpvReserved)
 #endif
 {
     if (fdwReason == DLL_PROCESS_ATTACH) {
@@ -49,6 +52,7 @@ BOOL WINAPI DllEntryPoint(HINSTANCE hinstDLL,
 #ifdef WIN32
         bTerminate = FALSE;
         hThread = CreateThread(NULL, 0, UpdateAudioThread, NULL, 0, &nThreadId);
+        SetPriorityClass(hThread, HIGH_PRIORITY_CLASS);
         SetThreadPriority(hThread, THREAD_PRIORITY_TIME_CRITICAL);
     }
     if (fdwReason == DLL_PROCESS_DETACH) {

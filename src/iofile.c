@@ -1,10 +1,14 @@
 /*
- * $Id: iofile.c 1.4 1996/05/24 08:30:44 chasan released $
+ * $Id: iofile.c 1.5 1996/08/05 18:51:19 chasan released $
  *
  * Input/Output file stream routines.
  *
- * Copyright (c) 1995, 1996 Carlos Hasan. All Rights Reserved.
+ * Copyright (c) 1995-1999 Carlos Hasan
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -17,90 +21,90 @@
 /*
  * Audio I/O file stream routines
  */
-static FILE *fpIOFile;
+static FILE *lpStream;
 
-UINT AIAPI AIOOpenFile(PSZ pszFileName)
+UINT AIAPI AIOOpenFile(LPSTR lpszFileName)
 {
-    if ((fpIOFile = fopen(pszFileName, "rb")) != NULL)
+    if ((lpStream = fopen(lpszFileName, "rb")) != NULL)
         return AUDIO_ERROR_NONE;
     return AUDIO_ERROR_FILENOTFOUND;
 }
 
 UINT AIAPI AIOCloseFile(VOID)
 {
-    fclose(fpIOFile);
+    fclose(lpStream);
     return AUDIO_ERROR_NONE;
 }
 
 UINT AIAPI AIOSeekFile(LONG dwOffset, UINT nWhere)
 {
-    fseek(fpIOFile, dwOffset, nWhere);
+    fseek(lpStream, dwOffset, nWhere);
     return AUDIO_ERROR_NONE;
 }
 
-UINT AIAPI AIOReadFile(PVOID pData, UINT nSize)
+UINT AIAPI AIOReadFile(LPVOID lpData, UINT nSize)
 {
-    if (fread(pData, 1, nSize, fpIOFile) != nSize)
-        memset(pData, 0, nSize);
+    if (fread(lpData, 1, nSize, lpStream) != nSize)
+        memset(lpData, 0, nSize);
     return AUDIO_ERROR_NONE;
 }
 
 /* little-endian input routines */
-UINT AIAPI AIOReadChar(PUCHAR pData)
+UINT AIAPI AIOReadChar(LPBYTE lpData)
 {
-    if (fread(pData, 1, sizeof(UCHAR), fpIOFile) != sizeof(UCHAR))
-        memset(pData, 0, sizeof(UCHAR));
+    if (fread(lpData, 1, sizeof(BYTE), lpStream) != sizeof(BYTE))
+        memset(lpData, 0, sizeof(BYTE));
     return AUDIO_ERROR_NONE;
 }
 
-UINT AIAPI AIOReadShort(PUSHORT pData)
+UINT AIAPI AIOReadShort(LPWORD lpData)
 {
-    if (fread(pData, 1, sizeof(USHORT), fpIOFile) != sizeof(USHORT))
-        memset(pData, 0, sizeof(USHORT));
+    if (fread(lpData, 1, sizeof(WORD), lpStream) != sizeof(WORD))
+        memset(lpData, 0, sizeof(WORD));
 #ifdef __BIGENDIAN__
-    *pData = MAKEWORD(HIBYTE(*pData), LOBYTE(*pData));
+    *lpData = MAKEWORD(HIBYTE(*lpData), LOBYTE(*lpData));
 #endif
     return AUDIO_ERROR_NONE;
 }
 
-UINT AIAPI AIOReadLong(PULONG pData)
+UINT AIAPI AIOReadLong(LPDWORD lpData)
 {
-    if (fread(pData, 1, sizeof(ULONG), fpIOFile) != sizeof(ULONG))
-        memset(pData, 0, sizeof(ULONG));
+    if (fread(lpData, 1, sizeof(DWORD), lpStream) != sizeof(DWORD))
+        memset(lpData, 0, sizeof(DWORD));
 #ifdef __BIGENDIAN__
-    *pData = MAKELONG(
-        MAKEWORD(HIBYTE(HIWORD(*pData)), LOBYTE(HIWORD(*pData))),
-            MAKEWORD(HIBYTE(LOWORD(*pData)), LOBYTE(LOWORD(*pData))));
+    *lpData = MAKELONG(
+        MAKEWORD(HIBYTE(HIWORD(*lpData)), LOBYTE(HIWORD(*lpData))),
+	MAKEWORD(HIBYTE(LOWORD(*lpData)), LOBYTE(LOWORD(*lpData))));
 #endif
     return AUDIO_ERROR_NONE;
 }
 
 /* big-endian input routines */
-UINT AIAPI AIOReadCharM(PUCHAR pData)
+UINT AIAPI AIOReadCharM(LPBYTE lpData)
 {
-    if (fread(pData, 1, sizeof(UCHAR), fpIOFile) != sizeof(UCHAR))
-        memset(pData, 0, sizeof(UCHAR));
+    if (fread(lpData, 1, sizeof(BYTE), lpStream) != sizeof(BYTE))
+        memset(lpData, 0, sizeof(BYTE));
     return AUDIO_ERROR_NONE;
 }
 
-UINT AIAPI AIOReadShortM(PUSHORT pData)
+UINT AIAPI AIOReadShortM(LPWORD lpData)
 {
-    if (fread(pData, 1, sizeof(USHORT), fpIOFile) != sizeof(USHORT))
-        memset(pData, 0, sizeof(USHORT));
+    if (fread(lpData, 1, sizeof(WORD), lpStream) != sizeof(WORD))
+        memset(lpData, 0, sizeof(WORD));
 #ifndef __BIGENDIAN__
-    *pData = MAKEWORD(HIBYTE(*pData), LOBYTE(*pData));
+    *lpData = MAKEWORD(HIBYTE(*lpData), LOBYTE(*lpData));
 #endif
     return AUDIO_ERROR_NONE;
 }
 
-UINT AIAPI AIOReadLongM(PULONG pData)
+UINT AIAPI AIOReadLongM(LPDWORD lpData)
 {
-    if (fread(pData, 1, sizeof(ULONG), fpIOFile) != sizeof(ULONG))
-        memset(pData, 0, sizeof(ULONG));
+    if (fread(lpData, 1, sizeof(DWORD), lpStream) != sizeof(DWORD))
+        memset(lpData, 0, sizeof(DWORD));
 #ifndef __BIGENDIAN__
-    *pData = MAKELONG(
-        MAKEWORD(HIBYTE(HIWORD(*pData)), LOBYTE(HIWORD(*pData))),
-            MAKEWORD(HIBYTE(LOWORD(*pData)), LOBYTE(LOWORD(*pData))));
+    *lpData = MAKELONG(
+        MAKEWORD(HIBYTE(HIWORD(*lpData)), LOBYTE(HIWORD(*lpData))),
+	MAKEWORD(HIBYTE(LOWORD(*lpData)), LOBYTE(LOWORD(*lpData))));
 #endif
     return AUDIO_ERROR_NONE;
 }

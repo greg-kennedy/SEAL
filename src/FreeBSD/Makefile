@@ -5,12 +5,12 @@ AR = ar
 RANLIB = ranlib
 STRIP = strip
 CFLAGS = -c -Wall -O2 -fomit-frame-pointer -D__FREEBSD__ -D__ASM__
-LFLAGS = -L. -laudio
+LFLAGS = -L../lib/FreeBSD -laudio
 
-OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o iofile.o \
-	modeng.o nondrv.o mixdrv.o _mixdrv.o lnxdrv.o
+OBJS = audio.o wavfile.o xmfile.o s3mfile.o modfile.o mtmfile.o \
+	iofile.o modeng.o nondrv.o mixdrv.o _mixdrv.o lnxdrv.o
 
-LIB = libaudio.a
+LIB = ../lib/FreeBSD/libaudio.a
 
 all : mp $(LIB) clean
 	@echo done.
