@@ -323,6 +323,11 @@ static VOID DSPStartPlayback(VOID)
 {
     DWORD dwBytesPerSecond;
 
+	DEBUG(printf("DSPStartPlayback: reset DSP processor\n"));
+
+    /* reset the DSP processor */
+    DSPReset();
+
     DEBUG(printf("DSPStartPlayback: set DMA %d and IRQ %d resources\n", SB.nDmaChannel, SB.nIrqLine));
 
     /* setup the DMA channel parameters */
@@ -330,11 +335,6 @@ static VOID DSPStartPlayback(VOID)
 
     /* setup our IRQ interrupt handler */
     DosSetVectorHandler(SB.nIrqLine, DSPInterruptHandler);
-
-    DEBUG(printf("DSPStartPlayback: reset DSP processor\n"));
-
-    /* reset the DSP processor */
-    DSPReset();
 
     DEBUG(printf("DSPStartPlayback: turn on speaker\n"));
 

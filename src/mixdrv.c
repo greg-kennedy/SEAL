@@ -78,6 +78,11 @@ static struct {
 LPLONG lpVolumeTable;
 LPBYTE lpFilterTable;
 
+/*JB 2000-02-25*/
+static signed int MixerValue = 0;
+/*JB END*/
+
+
 static VOID AIAPI UpdateVoices(LPBYTE lpData, UINT nCount);
 
 /* low level resamplation and quantization routines */
@@ -412,6 +417,63 @@ MixAudioData16SI(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 
 #endif
 
+/*JB 2000-02-25*/
+static VOID AIAPI
+MixAudioData16MRaw(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
+{
+    signed int a;
+
+    DWORD accum, delta;
+    signed long* buf;
+    signed short* data;
+
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    data = lpVoice->lpData;
+    buf = lpBuffer;
+
+
+    do {
+	a = data[accum >> ACCURACY];
+	a = (a*MixerValue)>>8; //since MixerValue is in 0-256 range
+	buf[0] += a;
+	accum += delta;
+        buf++;
+    } while (--nCount != 0);
+
+    lpVoice->dwAccum = accum;
+}
+
+static VOID AIAPI
+MixAudioData16SRaw(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
+{
+    signed int a;
+    DWORD accum, delta;
+    signed long* buf;
+    signed short* data;
+
+    accum = lpVoice->dwAccum;
+    delta = lpVoice->dwFrequency;
+    data = lpVoice->lpData;
+    buf = lpBuffer;
+
+    if (lpVoice->nPanning >= 0x80)
+	buf++; //set pointer to right channel
+
+    do {
+	a = data[accum >> ACCURACY];
+	a = (a*MixerValue)>>8; //since MixerValue is in 0-256 range
+	buf[0] += a;
+	//buf[1] += 0; //skip the other channel
+	accum += delta;
+	buf += 2;
+    } while (--nCount != 0);
+
+    lpVoice->dwAccum = accum;
+}
+/*JB END*/
+
+
 static VOID MixAudioData(LPLONG lpBuffer, UINT nCount, LPVOICE lpVoice)
 {
     UINT nSize;
@@ -549,8 +611,19 @@ static UINT AIAPI OpenAudio(LPAUDIOINFO lpInfo)
     else {
 	Synth.lpfnMixAudioProc[0] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
 	    MixAudioData08S : MixAudioData08M;
-	Synth.lpfnMixAudioProc[1] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
-	    MixAudioData16S : MixAudioData16M;
+/*JB 2000-02-25*/
+	if (Synth.wFormat & AUDIO_FORMAT_RAW_SAMPLE)
+	{
+		/*printf("SEAL mixdrv.c: Synth.wFormat |= FORMAT_RAW_SAMPLE\n");*/
+		Synth.lpfnMixAudioProc[1] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
+		    MixAudioData16SRaw : MixAudioData16MRaw;
+	}
+	else
+	{
+		Synth.lpfnMixAudioProc[1] = (Synth.wFormat & AUDIO_FORMAT_STEREO) ?
+		    MixAudioData16S : MixAudioData16M;
+	}
+/*JB END*/
     }
 
     /* allocate volume (0-64) and filter (0-31) table */
@@ -587,6 +660,10 @@ static UINT AIAPI SetAudioMixerValue(UINT nChannel, UINT nMixerValue)
     /* master volume must be less than 256 units */
     if (nChannel != AUDIO_MIXER_MASTER_VOLUME || nMixerValue > 256)
 	return AUDIO_ERROR_INVALPARAM;
+
+/*JB 2000-02-25*/
+    MixerValue = nMixerValue;
+/*JB END*/
 
     /* half dynamic range for mono output */
     if (!(Synth.wFormat & AUDIO_FORMAT_STEREO))

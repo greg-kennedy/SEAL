@@ -91,6 +91,11 @@ extern "C" {
 #define AUDIO_FORMAT_STEREO             0x0100
 #define AUDIO_FORMAT_FILTER             0x8000
 
+/*JB 2000-02-25*/
+#define AUDIO_FORMAT_RAW_SAMPLE         0x4000
+/*JB END*/
+
+
 /* audio resource limits defines */
 #define AUDIO_MAX_VOICES                32
 #define AUDIO_MAX_SAMPLES               16
